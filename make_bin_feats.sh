@@ -10,10 +10,17 @@ mkdir -p ${SOURCE_DIR}
 
 for i in festival/coeffs/*.feats;
     do
-    echo $i
+    echo "Making the features for " $i
     f=`basename $i|cut -d '.' -f1`
     tac $i > ${SOURCE_DIR}/${f}.lab
     done
+
+for i in festival/coeffs/*.mcep;
+   do
+   echo "Making the mceps for " $i
+   fname=$(basename "$i")
+   tac $i > ${SOURCE_DIR}/${fname}.mcep
+   done
 
 featfile=`cat etc/txt.done.data|awk '{print $2}'|head -1`
 feat_dim=`python bin/get_bin_dim.py $SOURCE_DIR/${featfile}.lab $PHONELIST $STATELIST`
