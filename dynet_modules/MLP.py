@@ -113,6 +113,6 @@ class NLayerMLP(object):
   @staticmethod
   def from_spec(spec, model):
     num_input, num_hidden_1, num_hidden_2, num_out, act = spec
-    return TwoLayerMLP(model, num_input, num_hidden_1, num_hidden_2, num_out, act)
+    return NLayerMLP(model, num_input, num_hidden_1, num_hidden_2, num_out, act)
 
 
