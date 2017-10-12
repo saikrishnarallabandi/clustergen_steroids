@@ -44,7 +44,7 @@ class AutoEncoder(object):
 
   @staticmethod
   def from_spec(spec, model):
-    num_input, num_hidden_1, num_hidden_2, num_out, act = spec
+    num_input, hidden_layer_list, num_out, act = spec
     return AutoEncoder(model, num_input, hidden_layer_list, num_out, act)
 
 
