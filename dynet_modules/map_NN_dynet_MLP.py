@@ -1,4 +1,4 @@
-from MLP import OneLayerMLP
+from MLP import NLayerMLP
 import dynet as dy
 import numpy as np
 from math import sqrt
@@ -16,12 +16,15 @@ b = output_scaler.transform(train_output)
 
 # Hyperparaeters for the MLP
 units_input = 711
-units_hidden = 1500
+units_hidden_1 = 1024
+units_hidden_2 = 1024
+units_hidden_3 = 1024
+units_hidden_4 = 1024
 units_output = 57
 
 # Instantiate mlp and define the loss
 m = dy.Model()
-mlp = OneLayerMLP(m, units_input, units_hidden, units_output, dy.rectify)
+mlp = NLayerMLP(m, units_input, [units_hidden_1, units_hidden_2, units_hidden_3, units_hidden_4], units_output, dy.rectify)
 trainer = dy.AdamTrainer(m)
 
 

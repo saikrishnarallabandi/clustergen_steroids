@@ -22,7 +22,7 @@ units_output = 57
 
 # Instantiate mlp and define the loss
 m = dy.Model()
-mlp = TwoLayerMLP(m, units_input, units_hidden_1, units_hidden_2, units_output, dy.rectify)
+mlp = TwoLayerMLP(m, units_input, [units_hidden_1, units_hidden_2], units_output, dy.rectify)
 trainer = dy.AdamTrainer(m)
 
 
