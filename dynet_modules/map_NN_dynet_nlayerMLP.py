@@ -14,7 +14,7 @@ a = input_scaler.transform(train_input)
 output_scaler = preprocessing.StandardScaler().fit(train_output)
 b = output_scaler.transform(train_output)
 
-# Hyperparaeters for the MLP
+# Hyperparameters for the MLP
 units_input = 711
 units_hidden_1 = 1024
 units_hidden_2 = 1024
