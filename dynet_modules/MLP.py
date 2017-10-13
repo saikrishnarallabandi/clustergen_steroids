@@ -1,5 +1,7 @@
 import dynet as dy
 
+debug = 1
+
 # Example of a user-defined saveable type.
 class OneLayerMLP(object):
   def __init__(self, model, num_input, num_hidden, num_out, act=dy.tanh):
@@ -74,6 +76,8 @@ class NLayerMLP(object):
   def __init__(self, model, num_input, hidden_layer_list, num_out, act=dy.tanh):
     self.number_of_layers = len(hidden_layer_list)
     num_hidden_1 = hidden_layer_list[0]
+    if debug == 1:
+        print "Adding input to first hidden layer weights ", num_hidden_1, num_input
     self.W1 = model.add_parameters((num_hidden_1, num_input))
     self.b1 = model.add_parameters((num_hidden_1))
     self.weight_matrix_array = []
@@ -81,8 +85,12 @@ class NLayerMLP(object):
     self.weight_matrix_array.append(self.W1)
     self.biases_array.append(self.b1)
     for k in range(1, self.number_of_layers):
+              if debug == 1: 
+                   print "At ", k , " adding weights ", hidden_layer_list[k], hidden_layer_list[k-1]
               self.weight_matrix_array.append(model.add_parameters((hidden_layer_list[k], hidden_layer_list[k-1])))
               self.biases_array.append(model.add_parameters((hidden_layer_list[k])))
+    if debug == 1:
+      print "Adding last hidden layer to output weights ", num_out, hidden_layer_list[-1]
     self.weight_matrix_array.append(model.add_parameters((num_out, hidden_layer_list[-1])))
     self.biases_array.append(model.add_parameters((num_out)))
     self.act = act
@@ -99,8 +107,10 @@ class NLayerMLP(object):
     w = weight_matrix_array[0]
     b = biases_array[0]
     intermediate = w*input + b
+    activations = [intermediate]
     for (W,b) in zip(weight_matrix_array[1:], biases_array[1:]):
-        pred =  (W * g(intermediate))  + b  
+        pred =  (W * g(activations[-1]))  + b
+        activations.append(pred)  
     if classification_flag == 1:
        return dy.softmax(pred)
     else:

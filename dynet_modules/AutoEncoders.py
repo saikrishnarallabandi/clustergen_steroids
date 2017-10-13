@@ -31,8 +31,10 @@ class AutoEncoder(object):
     w = weight_matrix_array[0]
     b = biases_array[0]
     intermediate = w*input + b
+    activations = [intermediate]
     for (W,b) in zip(weight_matrix_array[1:], biases_array[1:]):
-        pred =  (W * g(intermediate))  + b  
+        pred =  (W * g(activations[-1]))  + b
+        activations.append(pred)  
     if classification_flag == 1:
        return dy.softmax(pred)
     else:
