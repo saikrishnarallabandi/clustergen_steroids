@@ -1,4 +1,5 @@
 import dynet as dy
+import os
 
 # This is a very basic autoencoder with no fancy regularizers
 class AutoEncoder(object):
@@ -49,4 +50,20 @@ class AutoEncoder(object):
     num_input, hidden_layer_list, num_out, act = spec
     return AutoEncoder(model, num_input, hidden_layer_list, num_out, act)
 
+  def save(self, path):
+     if not os.path.exists(path): os.makedirs(path)
+     arr = [num_input, hidden_layer_list, num_out]
+     self.model.save(path, '_model')
+     with open(path + '_model_hyps', 'w') as f: pickle.dump(arr, f) 
+
+  @staticmethod
+  def load(model, path, load_model_params=True):
+      if not os.path.exists(path): raise Exception("Model "+path+" does not exist")
+      with open(path+"/model_hyps", "r") as f: arr = pickle.load(f)
+      model.populate(path + '_model')
+      number_of_layers = len(arr) -2
+      num_hidden_1 = arr[1]
+      num_input = arr[0]
+      num_output = arr[-1]
+      return AutoEncoder(model, num_input, hidden_layer_list, num_out, act=dy.tanh)
 
