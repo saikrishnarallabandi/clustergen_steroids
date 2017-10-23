@@ -11,6 +11,7 @@ class AutoEncoder(object):
     self.hidden_layer_list = hidden_layer_list
     self.num_out = num_out
     num_hidden_1 = hidden_layer_list[0]
+    self.model = model
     self.W1 = model.add_parameters((num_hidden_1, num_input))
     self.b1 = model.add_parameters((num_hidden_1))
     self.weight_matrix_array = []
@@ -57,14 +58,14 @@ class AutoEncoder(object):
   def save(self, path):
      if not os.path.exists(path): os.makedirs(path)
      arr = [self.num_input, self.hidden_layer_list, self.num_out]
-     with open(path + '_model_hyps', 'w') as f: pickle.dump(arr, f) 
-     self.model.save(path, '_model')
+     with open(path + '/model_hyps', 'w') as f: pickle.dump(arr, f) 
+     self.model.save(path + '/model')
 
   @staticmethod
   def load(model, path, load_model_params=True):
       if not os.path.exists(path): raise Exception("Model "+path+" does not exist")
-      with open(path+"_model_hyps", "r") as f: arr = pickle.load(f)
-      model.populate(path + '_model')
+      with open(path+"/model_hyps", "r") as f: arr = pickle.load(f)
+      model.populate(path + '/model')
       number_of_layers = len(arr) -2
       num_hidden_1 = arr[1]
       num_input = arr[0]
