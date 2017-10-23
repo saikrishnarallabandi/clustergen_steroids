@@ -6,6 +6,9 @@ class AutoEncoder(object):
   # Accepts a list as input which indicates the number of neurons in each hidden layer
   def __init__(self, model, num_input, hidden_layer_list, num_out, act=dy.tanh):
     self.number_of_layers = len(hidden_layer_list)
+    self.num_input = num_input
+    self.hidden_layer_list = hidden_layer_list
+    self.num_out = num_out
     num_hidden_1 = hidden_layer_list[0]
     self.W1 = model.add_parameters((num_hidden_1, num_input))
     self.b1 = model.add_parameters((num_hidden_1))
@@ -52,7 +55,7 @@ class AutoEncoder(object):
 
   def save(self, path):
      if not os.path.exists(path): os.makedirs(path)
-     arr = [num_input, hidden_layer_list, num_out]
+     arr = [self.num_input, self.hidden_layer_list, self.num_out]
      with open(path + '_model_hyps', 'w') as f: pickle.dump(arr, f) 
      self.model.save(path, '_model')
 
