@@ -66,9 +66,8 @@ class AutoEncoder(object):
       if not os.path.exists(path): raise Exception("Model "+path+" does not exist")
       with open(path+"/model_hyps", "r") as f: arr = pickle.load(f)
       model.populate(path + '/model')
-      number_of_layers = len(arr) -2
-      num_hidden_1 = arr[1]
+      hidden_layer_list = arr[1]
       num_input = arr[0]
-      num_output = arr[-1]
+      num_out = arr[2]
       return AutoEncoder(model, num_input, hidden_layer_list, num_out, act=dy.tanh)
 
