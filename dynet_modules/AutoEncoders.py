@@ -1,5 +1,6 @@
 import dynet as dy
 import os
+import pickle
 
 # This is a very basic autoencoder with no fancy regularizers
 class AutoEncoder(object):
