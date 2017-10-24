@@ -80,11 +80,11 @@ class VariationalAutoEncoder(object):
     self.num_out = num_out
     self.model = model
  
-    self.lstm_src_builder = dy.LSTMBuilder(1, self.num_input, sel.num_hidden, model)
+    self.lstm_src_builder = dy.LSTMBuilder(1, self.num_input, self.num_hidden, model)
     self.lstm_tgt_builder = dy.LSTMBuilder(1, self.num_input, self.num_hidden, model)
 
    # LSTM parameters
-    self.lstm_src_builder = dy.LSTMBuilder(1, self.num_input, sel.num_hidden, model)
+    self.lstm_src_builder = dy.LSTMBuilder(1, self.num_input, self.num_hidden, model)
     self.lstm_tgt_builder = dy.LSTMBuilder(1, self.num_input, self.num_hidden, model)
 
    # MLP parameters
