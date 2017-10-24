@@ -73,78 +73,76 @@ class AutoEncoder(object):
 
 
 class VariationalAutoEncoder(object):
-  # Accepts a list as input which indicates the number of neurons in each hidden layer
+
   def __init__(self, model, num_input, num_hidden, num_out, act=dy.tanh):
     self.num_input = num_input
     self.num_hidden = num_hidden
     self.num_out = num_out
     self.model = model
  
-    # LSTM parameters
     self.lstm_src_builder = dy.LSTMBuilder(1, self.num_input, sel.num_hidden, model)
     self.lstm_tgt_builder = dy.LSTMBuilder(1, self.num_input, self.num_hidden, model)
 
-    # MLP parameters
+   # LSTM parameters
+    self.lstm_src_builder = dy.LSTMBuilder(1, self.num_input, sel.num_hidden, model)
+    self.lstm_tgt_builder = dy.LSTMBuilder(1, self.num_input, self.num_hidden, model)
+
+   # MLP parameters
     num_hidden_q = 64
-    W_mean_p = model.add_parameters((num_hidden_q, num_hidden))
-    V_mean_p = model.add_parameters((num_hidden, num_hidden_q))
-    b_mean_p = model.add_parameters((num_hidden_q))
+    self.W_mean_p = model.add_parameters((num_hidden_q, num_hidden))
+    self.V_mean_p = model.add_parameters((num_hidden, num_hidden_q))
+    self.b_mean_p = model.add_parameters((num_hidden_q))
 
-    W_var_p = model.add_parameters((num_hidden_q, num_hidden))
-    V_var_p = model.add_parameters((num_hidden, num_hidden_q))
-    b_var_p = model.add_parameters((num_hidden_q))
+    self.W_var_p = model.add_parameters((num_hidden_q, num_hidden))
+    self.V_var_p = model.add_parameters((num_hidden, num_hidden_q))
+    self.b_var_p = model.add_parameters((num_hidden_q))
 
-    W_out_p = model.add_parameters((50, HIDDEN_SIZE))  # Weights of the output 
-    b_out_p = model.add_parameters((50))  # Output bias
+    self.W_out_p = model.add_parameters((num_output, num_hidden))
+    self.b_out_p = model.add_parameters((num_output)) 
 
-  # Reparameterization trick
   def reparameterize(self, mu, logvar):
-    # Get z by reparameterization.
     d = mu.dim()[0][0]
     eps = dy.random_normal(d)
     std = dy.exp(logvar * 0.5)
     return mu + dy.cmult(std, eps)
 
-  # MLP
   def mlp(x, W, V, b):
-    # A mlp with only one hidden layer.
     return V * dy.tanh(W * x + b)
   
 
-    self.W1 = model.add_parameters((num_hidden_1, num_input))
-    self.b1 = model.add_parameters((num_hidden_1))
-    self.weight_matrix_array = []
-    self.biases_array = []
-    self.weight_matrix_array.append(self.W1)
-    self.biases_array.append(self.b1)
-    for k in range(1, self.number_of_layers):
-              self.weight_matrix_array.append(model.add_parameters((hidden_layer_list[k], hidden_layer_list[k-1])))
-              self.biases_array.append(model.add_parameters((hidden_layer_list[k])))
-    self.weight_matrix_array.append(model.add_parameters((num_out, hidden_layer_list[-1])))
-    self.biases_array.append(model.add_parameters((num_out)))
-    self.act = act
-    self.spec = (num_input, hidden_layer_list, num_out, act)
+  def calc_loss_basic(input_frame , output_frame):
 
-  def __call__(self, input, output, classification_flag):
-    weight_matrix_array = []
-    biases_array = []
-    for (W,b) in zip(self.weight_matrix_array, self.biases_array):
-         weight_matrix_array.append(dy.parameter(W))
-         biases_array.append(dy.parameter(b))
-    #print " The number of total layers is ", len(weight_matrix_array)
-    g = self.act
-    w = weight_matrix_array[0]
-    b = biases_array[0]
-    intermediate = w*input + b
-    activations = [intermediate]
-    for (W,b) in zip(weight_matrix_array[1:], biases_array[1:]):
-        pred =  (W * g(activations[-1]))  + b
-        activations.append(pred)
-    if classification_flag == 1:
-       return dy.softmax(pred)
-    else:
-       losses = output - pred
-       return dy.l2_norm(losses)
+    # Renew the computation graph
+    dy.renew_cg()
+
+    # Instantiate the params
+    W_mean = dy.parameter(self.W_mean_p)
+    V_mean = dy.parameter(self.V_mean_p)
+    b_mean = dy.parameter(self.b_mean_p)
+
+    W_var = dy.parameter(self.W_var_p)
+    V_var = dy.parameter(self.V_var_p)
+    b_var = dy.parameter(self.b_var_p)    
+
+    # Get the mean and diagonal log covariance from the encoder
+    mu = self.mlp(input_frame , W_mean, V_mean, b_mean)
+    log_var = self.mlp(input_frame , W_mean, V_mean, b_mean)
+
+    # Compute the KL Divergence loss
+    kl_loss = -0.5 * dy.sum_elems(1 + log_var - dy.pow(mu, dy.inputVector([2])) - dy.exp(log_var))
+
+    # Reparameterize
+    z = reparameterize(mu, log_var)
+
+    W_out = dy.parameter(self.W_out_p)
+    b_out = dy.parameter(self.b_out_p)
+
+    # Calculate the reconstruction loss
+    pred = dy.affine_transform([b_out, W_out, z])
+    recons_loss = dy.l2_norm(output_frame - pred)
+
+    return kl_loss, recons_loss
+
 
   # support saving:
   def param_collection(self): return self.pc
