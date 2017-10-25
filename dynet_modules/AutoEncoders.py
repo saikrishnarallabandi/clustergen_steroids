@@ -279,6 +279,16 @@ class AutoEncoder_file(object):
     return mu + dy.cmult(std, eps)
 
   def mlp(self, x, W, V, b):
+    #print "Multiply"
+    #print W.value()
+    #print x
+    #W * x
+    #print "Affine Transform"
+    #W * x + b
+    #print "Squesh"
+    #dy.tanh(W * x + b)
+    #print "MLP"
+    #print V * dy.tanh(W * x + b)  
     return V * dy.tanh(W * x + b)
   
   def calc_loss_basic(self, file , label):
@@ -301,6 +311,9 @@ class AutoEncoder_file(object):
     output_label = label
 
     # Get the LSTM embeddings
+    #for frame in input_frames:
+    #      init_state_src.add_input(frame)
+    #src_output = init_state_src.output()
     src_output = init_state_src.add_inputs([frame for frame in input_frames])[-1].output()
 
     # Get the mean and diagonal log covariance from the encoder
