@@ -311,9 +311,6 @@ class AutoEncoder_file(object):
     output_label = label
 
     # Get the LSTM embeddings
-    #for frame in input_frames:
-    #      init_state_src.add_input(frame)
-    #src_output = init_state_src.output()
     src_output = init_state_src.add_inputs([frame for frame in input_frames])[-1].output()
 
     # Get the mean and diagonal log covariance from the encoder
@@ -332,16 +329,18 @@ class AutoEncoder_file(object):
     # Calculate the reconstruction loss
     pred = dy.affine_transform([b_sm, W_sm, z])
     label_embedding = self.lookup[label]
-    #print pred.value()
-    #print label_embedding.value()
+    #print label, label_embedding
     recons_loss = dy.pickneglogsoftmax(pred, label)
 
     return kl_loss, recons_loss
 
-  def predict(self, input_frame):
+  def predict_label(self, file):
 
     # Renew the computation graph
     #dy.renew_cg()
+
+    # Initialize LSTM
+    init_state_src = self.lstm_builder.initial_state()
 
     # Instantiate the params
     W_mean = dy.parameter(self.W_mean_p)
@@ -350,27 +349,32 @@ class AutoEncoder_file(object):
     W_var = dy.parameter(self.W_var_p)
     V_var = dy.parameter(self.V_var_p)
     b_var = dy.parameter(self.b_var_p)
-    input_frame = dy.inputTensor(input_frame)
+
+    input_frames = dy.inputTensor(np.loadtxt(file))
+
+    src_output = init_state_src.add_inputs([frame for frame in input_frames])[-1].output()
 
     # Get the mean and diagonal log covariance from the encoder
-    mu = self.mlp(input_frame , W_mean, V_mean, b_mean)
-    log_var = self.mlp(input_frame , W_mean, V_mean, b_mean)
+    mu = self.mlp(src_output , W_mean, V_mean, b_mean)
+    log_var = self.mlp(src_output , W_mean, V_mean, b_mean)
 
     # Compute the KL Divergence loss
-    kl_loss = -0.5 * dy.sum_elems(1 + log_var - dy.pow(mu, dy.inputVector([2])) - dy.exp(log_var))
+    #kl_loss = -0.5 * dy.sum_elems(1 + log_var - dy.pow(mu, dy.inputVector([2])) - dy.exp(log_var))
 
     # Reparameterize
     z = self.reparameterize(mu, log_var)
 
-    W_out = dy.parameter(self.W_out_p)
-    b_out = dy.parameter(self.b_out_p)
+    W_sm = dy.parameter(self.W_sm_p)
+    b_sm = dy.parameter(self.b_sm_p)
 
     # Calculate the reconstruction loss
-    pred = dy.affine_transform([b_out, W_out, z])
-
-    return pred
-
-
+    pred = dy.affine_transform([b_sm, W_sm, z])
+    #label_embedding = self.lookup[pred]
+    #print pred.value()
+    #print label_embedding.value()
+    #recons_loss = dy.pickneglogsoftmax(pred, label)
+    return dy.softmax(pred)
+    #return kl_loss, recons_loss
 
   # support saving:
   def param_collection(self): return self.pc
