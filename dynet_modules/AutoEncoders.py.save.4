@@ -625,6 +625,7 @@ class ProbabilisticAutoEncoderBiLSTM_file(object):
     # Compute the KL Divergence loss
     kl_loss = -0.5 * dy.sum_elems(1 + log_var - dy.pow(mu, dy.inputVector([2])) - dy.exp(log_var))
 
+
     # Reparameterize
     z = self.reparameterize(mu, log_var)
 
