@@ -83,7 +83,7 @@ class VariationalAutoEncoder(object):
     print "Loaded params"
   
    # MLP parameters
-    num_hidden_q = 64
+    num_hidden_q = 3
     self.W_mean_p = model.add_parameters((num_hidden_q, num_input))
     self.V_mean_p = model.add_parameters((num_hidden, num_hidden_q))
     self.b_mean_p = model.add_parameters((num_hidden_q))
@@ -240,7 +240,7 @@ class VariationalAutoEncoder(object):
 
 
 
-class AutoEncoder_file(object):
+class VariationalAutoEncoder_file(object):
 
   def __init__(self, model, num_input, num_hidden, num_output, act=dy.tanh):
     self.num_input = int(num_input)
@@ -251,13 +251,13 @@ class AutoEncoder_file(object):
 
    # Label embeddings
     self.num_embed = 5
-    self.lookup = model.add_lookup_parameters((2, self.num_embed))
+    self.lookup = model.add_lookup_parameters((self.num_out, self.num_embed))
    
    # LSTM Parameters
     self.lstm_builder = dy.LSTMBuilder(1, self.num_input, num_hidden, model)  
 
    # MLP parameters
-    num_hidden_q = 64
+    num_hidden_q = 16
     self.W_mean_p = model.add_parameters((num_hidden_q, num_hidden))
     self.V_mean_p = model.add_parameters((num_hidden, num_hidden_q))
     self.b_mean_p = model.add_parameters((num_hidden_q))
@@ -279,16 +279,6 @@ class AutoEncoder_file(object):
     return mu + dy.cmult(std, eps)
 
   def mlp(self, x, W, V, b):
-    #print "Multiply"
-    #print W.value()
-    #print x
-    #W * x
-    #print "Affine Transform"
-    #W * x + b
-    #print "Squesh"
-    #dy.tanh(W * x + b)
-    #print "MLP"
-    #print V * dy.tanh(W * x + b)  
     return V * dy.tanh(W * x + b)
   
   def calc_loss_basic(self, file , label):
@@ -375,6 +365,609 @@ class AutoEncoder_file(object):
     #recons_loss = dy.pickneglogsoftmax(pred, label)
     return dy.softmax(pred)
     #return kl_loss, recons_loss
+
+  # support saving:
+  def param_collection(self): return self.pc
+
+  @staticmethod
+  def from_spec(spec, model):
+    num_input, hidden_layer_list, num_out, act = spec
+    return AutoEncoder(model, num_input, hidden_layer_list, num_out, act)
+
+  def save(self, path):
+     if not os.path.exists(path): os.makedirs(path)
+     arr = [self.num_input, self.num_hidden, self.num_out]
+     with open(path + '/model_hyps', 'w') as f: pickle.dump(arr, f)
+     self.model.save(path + '/model')
+
+  @staticmethod
+  def load(model, path, load_model_params=True):
+      if not os.path.exists(path): raise Exception("Model "+path+" does not exist")
+      with open(path+"/model_hyps", "r") as f: arr = pickle.load(f)
+      model.populate(path + '/model')
+      hidden_layer_list = arr[1]
+      num_input = arr[0]
+      num_out = arr[2]
+      return AutoEncoder(model, num_input, hidden_layer_list, num_out, act=dy.tanh)
+
+
+
+class ProbabilisticAutoEncoder_file(object):
+
+  def __init__(self, model, num_input, num_hidden, num_output, act=dy.tanh):
+    self.num_input = int(num_input)
+    self.num_hidden = int(num_hidden)
+    self.num_out = int(num_output)
+    self.model = model
+    print "Loaded params"
+
+   # Label embeddings
+    self.num_embed = 5
+    self.lookup = model.add_lookup_parameters((self.num_out, self.num_embed))
+   
+   # LSTM Parameters
+    self.lstm_builder = dy.LSTMBuilder(1, self.num_input, num_hidden, model)  
+
+   # MLP parameters
+    num_hidden_q = 16
+    self.W_mean_p = model.add_parameters((num_hidden_q, num_hidden))
+    self.V_mean_p = model.add_parameters((num_hidden, num_hidden_q))
+    self.b_mean_p = model.add_parameters((num_hidden_q))
+    print "Loaded params for means"
+   
+    self.W_var_p = model.add_parameters((num_hidden_q, num_hidden))
+    self.V_var_p = model.add_parameters((num_hidden, num_hidden_q))
+    self.b_var_p = model.add_parameters((num_hidden_q))
+    print "Loaded params for variances"
+
+    self.W_sm_p = model.add_parameters((num_output, num_hidden))
+    self.b_sm_p = model.add_parameters((num_output)) 
+    print "Loaded params for output"
+
+  def reparameterize(self, mu, logvar):
+    d = mu.dim()[0][0]
+    eps = dy.random_normal(d)
+    std = dy.exp(logvar * 0.5)
+    return mu + dy.cmult(std, eps)
+
+  def mlp(self, x, W, V, b):
+    return V * dy.tanh(W * x + b)
+  
+  def calc_loss_basic(self, file , label):
+
+    # Renew the computation graph
+    dy.renew_cg()
+
+    # Initialize LSTM
+    init_state_src = self.lstm_builder.initial_state()
+
+    # Instantiate the params
+    W_mean = dy.parameter(self.W_mean_p)
+    V_mean = dy.parameter(self.V_mean_p)
+    b_mean = dy.parameter(self.b_mean_p)
+    W_var = dy.parameter(self.W_var_p)
+    V_var = dy.parameter(self.V_var_p)
+    b_var = dy.parameter(self.b_var_p)
+       
+    input_frames = dy.inputTensor(np.loadtxt(file))
+    output_label = label
+
+    # Get the LSTM embeddings
+    src_output = init_state_src.add_inputs([frame for frame in input_frames])[-1].output()
+
+    # Get the mean and diagonal log covariance from the encoder
+    mu = self.mlp(src_output , W_mean, V_mean, b_mean)
+    log_var = self.mlp(src_output , W_mean, V_mean, b_mean)
+
+    # Compute the KL Divergence loss
+    kl_loss = -0.5 * dy.sum_elems(1 + log_var - dy.pow(mu, dy.inputVector([2])) - dy.exp(log_var))
+
+    # Reparameterize
+    z = self.reparameterize(mu, log_var)
+
+    W_sm = dy.parameter(self.W_sm_p)
+    b_sm = dy.parameter(self.b_sm_p)
+
+    # Calculate the reconstruction loss
+    pred = dy.affine_transform([b_sm, W_sm, z])
+    label_embedding = self.lookup[label]
+    #print label, label_embedding
+    recons_loss = dy.pickneglogsoftmax(pred, label)
+
+    return kl_loss, recons_loss
+
+  def predict_label(self, file):
+
+    # Renew the computation graph
+    #dy.renew_cg()
+
+    # Initialize LSTM
+    init_state_src = self.lstm_builder.initial_state()
+
+    # Instantiate the params
+    W_mean = dy.parameter(self.W_mean_p)
+    V_mean = dy.parameter(self.V_mean_p)
+    b_mean = dy.parameter(self.b_mean_p)
+    W_var = dy.parameter(self.W_var_p)
+    V_var = dy.parameter(self.V_var_p)
+    b_var = dy.parameter(self.b_var_p)
+
+    input_frames = dy.inputTensor(np.loadtxt(file))
+
+    src_output = init_state_src.add_inputs([frame for frame in input_frames])[-1].output()
+
+    # Get the mean and diagonal log covariance from the encoder
+    mu = self.mlp(src_output , W_mean, V_mean, b_mean)
+    log_var = self.mlp(src_output , W_mean, V_mean, b_mean)
+
+    # Compute the KL Divergence loss
+    #kl_loss = -0.5 * dy.sum_elems(1 + log_var - dy.pow(mu, dy.inputVector([2])) - dy.exp(log_var))
+
+    # Reparameterize
+    z = self.reparameterize(mu, log_var)
+
+    W_sm = dy.parameter(self.W_sm_p)
+    b_sm = dy.parameter(self.b_sm_p)
+
+    # Calculate the reconstruction loss
+    pred = dy.affine_transform([b_sm, W_sm, z])
+    #label_embedding = self.lookup[pred]
+    #print pred.value()
+    #print label_embedding.value()
+    #recons_loss = dy.pickneglogsoftmax(pred, label)
+    return dy.softmax(pred)
+    #return kl_loss, recons_loss
+
+  # support saving:
+  def param_collection(self): return self.pc
+
+  @staticmethod
+  def from_spec(spec, model):
+    num_input, hidden_layer_list, num_out, act = spec
+    return AutoEncoder(model, num_input, hidden_layer_list, num_out, act)
+
+  def save(self, path):
+     if not os.path.exists(path): os.makedirs(path)
+     arr = [self.num_input, self.num_hidden, self.num_out]
+     with open(path + '/model_hyps', 'w') as f: pickle.dump(arr, f)
+     self.model.save(path + '/model')
+
+  @staticmethod
+  def load(model, path, load_model_params=True):
+      if not os.path.exists(path): raise Exception("Model "+path+" does not exist")
+      with open(path+"/model_hyps", "r") as f: arr = pickle.load(f)
+      model.populate(path + '/model')
+      hidden_layer_list = arr[1]
+      num_input = arr[0]
+      num_out = arr[2]
+      return AutoEncoder(model, num_input, hidden_layer_list, num_out, act=dy.tanh)
+
+
+
+
+class ProbabilisticAutoEncoderBiLSTM_file(object):
+
+  def __init__(self, model, num_input, num_hidden, num_output, num_latent, act=dy.tanh):
+    self.num_input = int(num_input)
+    self.num_hidden = int(num_hidden)
+    self.num_out = int(num_output)
+    self.model = model
+    self.num_latent = num_latent
+    print "Loaded params"
+
+   # Label embeddings
+    self.num_embed = 5
+    self.lookup = model.add_lookup_parameters((self.num_out, self.num_embed))
+   
+   # LSTM Parameters
+    self.lstm_fwd_builder = dy.LSTMBuilder(1, self.num_input, num_hidden, model)  
+    self.lstm_bwd_builder = dy.LSTMBuilder(1, self.num_input, num_hidden, model)
+
+   # MLP parameters
+    num_hidden_q = self.num_latent
+    self.W_mean_p = model.add_parameters((num_hidden_q, num_hidden*2))
+    self.V_mean_p = model.add_parameters((2*num_hidden, num_hidden_q))
+    self.b_mean_p = model.add_parameters((num_hidden_q))
+    print "Loaded params for means"
+   
+    self.W_var_p = model.add_parameters((num_hidden_q, num_hidden*2))
+    self.V_var_p = model.add_parameters((num_hidden*2, num_hidden_q))
+    self.b_var_p = model.add_parameters((num_hidden_q))
+    print "Loaded params for variances"
+
+    self.W_sm_p = model.add_parameters((num_output, num_hidden*2))
+    self.b_sm_p = model.add_parameters((num_output)) 
+    print "Loaded params for output"
+
+  def reparameterize(self, mu, logvar):
+    d = mu.dim()[0][0]
+    eps = dy.random_normal(d)
+    std = dy.exp(logvar * 0.5)
+    return mu + dy.cmult(std, eps)
+
+  def mlp(self, x, W, V, b):
+    return V * dy.tanh(W * x + b)
+  
+  def calc_loss_basic(self, file , label):
+
+    # Renew the computation graph
+    dy.renew_cg()
+
+    # Initialize LSTM
+    init_state_fwd = self.lstm_fwd_builder.initial_state()
+    init_state_bwd = self.lstm_bwd_builder.initial_state()
+
+    # Instantiate the params
+    W_mean = dy.parameter(self.W_mean_p)
+    V_mean = dy.parameter(self.V_mean_p)
+    b_mean = dy.parameter(self.b_mean_p)
+    W_var = dy.parameter(self.W_var_p)
+    V_var = dy.parameter(self.V_var_p)
+    b_var = dy.parameter(self.b_var_p)
+       
+    input_frames = dy.inputTensor(np.loadtxt(file))
+    input_frames_reverse = dy.inputTensor(np.flipud(np.loadtxt(file)))
+    output_label = label
+
+    # Get the LSTM embeddings
+    fwd_output = init_state_fwd.add_inputs([frame for frame in input_frames])[-1].output()
+    #input_frames.reverse()
+    bwd_output = init_state_bwd.add_inputs([frame for frame in input_frames_reverse])[-1].output()    
+
+    # Concatenate
+    bilstm_embeddings = dy.concatenate([fwd_output, bwd_output])
+    
+
+    # Get the mean and diagonal log covariance from the encoder
+    mu = self.mlp(bilstm_embeddings , W_mean, V_mean, b_mean)
+    log_var = self.mlp(bilstm_embeddings , W_mean, V_mean, b_mean)
+
+    # Compute the KL Divergence loss
+    kl_loss = -0.5 * dy.sum_elems(1 + log_var - dy.pow(mu, dy.inputVector([2])) - dy.exp(log_var))
+
+    # Reparameterize
+    z = self.reparameterize(mu, log_var)
+
+    W_sm = dy.parameter(self.W_sm_p)
+    b_sm = dy.parameter(self.b_sm_p)
+
+    # Calculate the reconstruction loss
+    pred = dy.affine_transform([b_sm, W_sm, z])
+    label_embedding = self.lookup[label]
+    #print label, label_embedding
+    recons_loss = dy.pickneglogsoftmax(pred, label)
+
+    return kl_loss, recons_loss
+
+  def predict_label(self, file):
+
+    # Initialize LSTM
+    init_state_fwd = self.lstm_fwd_builder.initial_state()
+    init_state_bwd = self.lstm_bwd_builder.initial_state()
+
+    # Instantiate the params
+    W_mean = dy.parameter(self.W_mean_p)
+    V_mean = dy.parameter(self.V_mean_p)
+    b_mean = dy.parameter(self.b_mean_p)
+    W_var = dy.parameter(self.W_var_p)
+    V_var = dy.parameter(self.V_var_p)
+    b_var = dy.parameter(self.b_var_p)
+
+    input_frames = dy.inputTensor(np.loadtxt(file))
+    input_frames_reverse = dy.inputTensor(np.flipud(np.loadtxt(file)))
+
+    # Get the LSTM embeddings
+    fwd_output = init_state_fwd.add_inputs([frame for frame in input_frames])[-1].output()
+    #input_frames.reverse()
+    bwd_output = init_state_bwd.add_inputs([frame for frame in input_frames_reverse])[-1].output()
+
+    # Concatenate
+    bilstm_embeddings = dy.concatenate([fwd_output, bwd_output])
+
+
+    # Get the mean and diagonal log covariance from the encoder
+    mu = self.mlp(bilstm_embeddings , W_mean, V_mean, b_mean)
+    log_var = self.mlp(bilstm_embeddings , W_mean, V_mean, b_mean)
+
+    # Compute the KL Divergence loss
+    kl_loss = -0.5 * dy.sum_elems(1 + log_var - dy.pow(mu, dy.inputVector([2])) - dy.exp(log_var))
+
+    # Reparameterize
+    z = self.reparameterize(mu, log_var)
+
+    W_sm = dy.parameter(self.W_sm_p)
+    b_sm = dy.parameter(self.b_sm_p)
+    pred = dy.affine_transform([b_sm, W_sm, z])
+    return dy.softmax(pred)
+
+  # support saving:
+  def param_collection(self): return self.pc
+
+  @staticmethod
+  def from_spec(spec, model):
+    num_input, hidden_layer_list, num_out, act = spec
+    return AutoEncoder(model, num_input, hidden_layer_list, num_out, act)
+
+  def save(self, path):
+     if not os.path.exists(path): os.makedirs(path)
+     arr = [self.num_input, self.num_hidden, self.num_out]
+     with open(path + '/model_hyps', 'w') as f: pickle.dump(arr, f)
+     self.model.save(path + '/model')
+
+  @staticmethod
+  def load(model, path, load_model_params=True):
+      if not os.path.exists(path): raise Exception("Model "+path+" does not exist")
+      with open(path+"/model_hyps", "r") as f: arr = pickle.load(f)
+      model.populate(path + '/model')
+      hidden_layer_list = arr[1]
+      num_input = arr[0]
+      num_out = arr[2]
+      return AutoEncoder(model, num_input, hidden_layer_list, num_out, act=dy.tanh)
+
+
+
+
+class EncoderBiLSTM_file(object):
+
+  def __init__(self, model, num_input, num_hidden, num_output, num_latent, act=dy.tanh):
+    self.num_input = int(num_input)
+    self.num_hidden = int(num_hidden)
+    self.num_out = int(num_output)
+    self.model = model
+    self.num_latent = num_latent
+    print "Loaded params"
+
+   # Label embeddings
+    self.num_embed = 5
+    self.lookup = model.add_lookup_parameters((self.num_out, self.num_embed))
+   
+   # LSTM Parameters
+    self.lstm_fwd_builder = dy.LSTMBuilder(1, self.num_input, num_hidden, model)  
+    self.lstm_bwd_builder = dy.LSTMBuilder(1, self.num_input, num_hidden, model)
+
+   # MLP parameters
+    num_hidden_q = num_latent
+    self.W_mean_p = model.add_parameters((num_hidden_q, num_hidden*2))
+    self.V_mean_p = model.add_parameters((2*num_hidden, num_hidden_q))
+    self.b_mean_p = model.add_parameters((num_hidden_q))
+    print "Loaded params for means"
+   
+    self.W_var_p = model.add_parameters((num_hidden_q, num_hidden*2))
+    self.V_var_p = model.add_parameters((num_hidden*2, num_hidden_q))
+    self.b_var_p = model.add_parameters((num_hidden_q))
+    print "Loaded params for variances"
+
+    self.W_sm_p = model.add_parameters((num_output, num_hidden*2))
+    self.b_sm_p = model.add_parameters((num_output)) 
+    print "Loaded params for output"
+
+  def reparameterize(self, mu, logvar):
+    d = mu.dim()[0][0]
+    eps = dy.random_normal(d)
+    std = dy.exp(logvar * 0.5)
+    return mu + dy.cmult(std, eps)
+
+  def mlp(self, x, W, V, b):
+    return V * dy.tanh(W * x + b)
+  
+  def calc_loss_basic(self, file , label):
+
+    # Renew the computation graph
+    dy.renew_cg()
+
+    # Initialize LSTM
+    init_state_fwd = self.lstm_fwd_builder.initial_state()
+    init_state_bwd = self.lstm_bwd_builder.initial_state()
+
+    # Instantiate the params
+    W_mean = dy.parameter(self.W_mean_p)
+    V_mean = dy.parameter(self.V_mean_p)
+    b_mean = dy.parameter(self.b_mean_p)
+    W_var = dy.parameter(self.W_var_p)
+    V_var = dy.parameter(self.V_var_p)
+    b_var = dy.parameter(self.b_var_p)
+       
+    input_frames = dy.inputTensor(np.loadtxt(file))
+    input_frames_reverse = dy.inputTensor(np.flipud(np.loadtxt(file)))
+    output_label = label
+
+    # Get the LSTM embeddings
+    fwd_output = init_state_fwd.add_inputs([frame for frame in input_frames])[-1].output()
+    #input_frames.reverse()
+    bwd_output = init_state_bwd.add_inputs([frame for frame in input_frames_reverse])[-1].output()    
+
+    # Concatenate
+    bilstm_embeddings = dy.concatenate([fwd_output, bwd_output])
+    
+    '''
+    # Get the mean and diagonal log covariance from the encoder
+    mu = self.mlp(bilstm_embeddings , W_mean, V_mean, b_mean)
+    log_var = self.mlp(bilstm_embeddings , W_mean, V_mean, b_mean)
+
+    # Compute the KL Divergence loss
+    kl_loss = -0.5 * dy.sum_elems(1 + log_var - dy.pow(mu, dy.inputVector([2])) - dy.exp(log_var))
+
+    # Reparameterize
+    z = self.reparameterize(mu, log_var)
+    '''
+
+    W_sm = dy.parameter(self.W_sm_p)
+    b_sm = dy.parameter(self.b_sm_p)
+
+    # Calculate the reconstruction loss
+    pred = dy.affine_transform([b_sm, W_sm, bilstm_embeddings])
+    label_embedding = self.lookup[label]
+    #print label, label_embedding
+    recons_loss = dy.pickneglogsoftmax(pred, label)
+
+    return recons_loss
+
+  def predict_label(self, file):
+
+    # Initialize LSTM
+    init_state_fwd = self.lstm_fwd_builder.initial_state()
+    init_state_bwd = self.lstm_bwd_builder.initial_state()
+
+    # Instantiate the params
+    W_mean = dy.parameter(self.W_mean_p)
+    V_mean = dy.parameter(self.V_mean_p)
+    b_mean = dy.parameter(self.b_mean_p)
+    W_var = dy.parameter(self.W_var_p)
+    V_var = dy.parameter(self.V_var_p)
+    b_var = dy.parameter(self.b_var_p)
+
+    input_frames = dy.inputTensor(np.loadtxt(file))
+    input_frames_reverse = dy.inputTensor(np.flipud(np.loadtxt(file)))
+
+    # Get the LSTM embeddings
+    fwd_output = init_state_fwd.add_inputs([frame for frame in input_frames])[-1].output()
+    #input_frames.reverse()
+    bwd_output = init_state_bwd.add_inputs([frame for frame in input_frames_reverse])[-1].output()
+
+    # Concatenate
+    bilstm_embeddings = dy.concatenate([fwd_output, bwd_output])
+    
+    '''
+    # Get the mean and diagonal log covariance from the encoder
+    mu = self.mlp(bilstm_embeddings , W_mean, V_mean, b_mean)
+    log_var = self.mlp(bilstm_embeddings , W_mean, V_mean, b_mean)
+
+    # Compute the KL Divergence loss
+    kl_loss = -0.5 * dy.sum_elems(1 + log_var - dy.pow(mu, dy.inputVector([2])) - dy.exp(log_var))
+
+    # Reparameterize
+    z = self.reparameterize(mu, log_var)
+    '''
+
+    W_sm = dy.parameter(self.W_sm_p)
+    b_sm = dy.parameter(self.b_sm_p)
+ 
+    pred = dy.affine_transform([b_sm, W_sm, bilstm_embeddings])
+    return dy.softmax(pred)
+
+  # support saving:
+  def param_collection(self): return self.pc
+
+  @staticmethod
+  def from_spec(spec, model):
+    num_input, hidden_layer_list, num_out, act = spec
+    return AutoEncoder(model, num_input, hidden_layer_list, num_out, act)
+
+  def save(self, path):
+     if not os.path.exists(path): os.makedirs(path)
+     arr = [self.num_input, self.num_hidden, self.num_out]
+     with open(path + '/model_hyps', 'w') as f: pickle.dump(arr, f)
+     self.model.save(path + '/model')
+
+  @staticmethod
+  def load(model, path, load_model_params=True):
+      if not os.path.exists(path): raise Exception("Model "+path+" does not exist")
+      with open(path+"/model_hyps", "r") as f: arr = pickle.load(f)
+      model.populate(path + '/model')
+      hidden_layer_list = arr[1]
+      num_input = arr[0]
+      num_out = arr[2]
+      return AutoEncoder(model, num_input, hidden_layer_list, num_out, act=dy.tanh)
+
+
+
+class EncoderUniLSTM_file(object):
+
+  def __init__(self, model, num_input, num_hidden, num_output, num_latent, act=dy.tanh):
+    self.num_input = int(num_input)
+    self.num_hidden = int(num_hidden)
+    self.num_out = int(num_output)
+    self.model = model
+    self.num_latent = num_latent
+    print "Loaded params"
+
+   # Label embeddings
+    self.num_embed = 5
+    self.lookup = model.add_lookup_parameters((self.num_out, self.num_embed))
+   
+   # LSTM Parameters
+    self.lstm_fwd_builder = dy.LSTMBuilder(1, self.num_input, num_hidden, model)  
+
+   # MLP parameters
+    num_hidden_q = self.num_latent
+    self.W_mean_p = model.add_parameters((num_hidden_q, num_hidden))
+    self.V_mean_p = model.add_parameters((num_hidden, num_hidden_q))
+    self.b_mean_p = model.add_parameters((num_hidden_q))
+    print "Loaded params for means"
+   
+    self.W_var_p = model.add_parameters((num_hidden_q, num_hidden))
+    self.V_var_p = model.add_parameters((num_hidden, num_hidden_q))
+    self.b_var_p = model.add_parameters((num_hidden_q))
+    print "Loaded params for variances"
+
+    self.W_sm_p = model.add_parameters((num_output, num_hidden))
+    self.b_sm_p = model.add_parameters((num_output)) 
+    print "Loaded params for output"
+
+  def reparameterize(self, mu, logvar):
+    d = mu.dim()[0][0]
+    eps = dy.random_normal(d)
+    std = dy.exp(logvar * 0.5)
+    return mu + dy.cmult(std, eps)
+
+  def mlp(self, x, W, V, b):
+    return V * dy.tanh(W * x + b)
+  
+  def calc_loss_basic(self, file , label):
+
+    # Renew the computation graph
+    dy.renew_cg()
+
+    # Initialize LSTM
+    init_state_fwd = self.lstm_fwd_builder.initial_state()
+
+    # Instantiate the params
+    W_mean = dy.parameter(self.W_mean_p)
+    V_mean = dy.parameter(self.V_mean_p)
+    b_mean = dy.parameter(self.b_mean_p)
+    W_var = dy.parameter(self.W_var_p)
+    V_var = dy.parameter(self.V_var_p)
+    b_var = dy.parameter(self.b_var_p)
+       
+    input_frames = dy.inputTensor(np.loadtxt(file))
+    input_frames_reverse = dy.inputTensor(np.flipud(np.loadtxt(file)))
+    output_label = label
+
+    # Get the LSTM embeddings
+    fwd_output = init_state_fwd.add_inputs([frame for frame in input_frames])[-1].output()
+
+    W_sm = dy.parameter(self.W_sm_p)
+    b_sm = dy.parameter(self.b_sm_p)
+
+    # Calculate the reconstruction loss
+    pred = dy.affine_transform([b_sm, W_sm, fwd_output])
+    recons_loss = dy.pickneglogsoftmax(pred, label)
+
+    return recons_loss
+
+  def predict_label(self, file):
+
+    # Initialize LSTM
+    init_state_fwd = self.lstm_fwd_builder.initial_state()
+
+    # Instantiate the params
+    W_mean = dy.parameter(self.W_mean_p)
+    V_mean = dy.parameter(self.V_mean_p)
+    b_mean = dy.parameter(self.b_mean_p)
+    W_var = dy.parameter(self.W_var_p)
+    V_var = dy.parameter(self.V_var_p)
+    b_var = dy.parameter(self.b_var_p)
+
+    input_frames = dy.inputTensor(np.loadtxt(file))
+
+    # Get the LSTM embeddings
+    fwd_output = init_state_fwd.add_inputs([frame for frame in input_frames])[-1].output()
+
+    W_sm = dy.parameter(self.W_sm_p)
+    b_sm = dy.parameter(self.b_sm_p)
+ 
+    pred = dy.affine_transform([b_sm, W_sm, fwd_output])
+    return dy.softmax(pred)
 
   # support saving:
   def param_collection(self): return self.pc
