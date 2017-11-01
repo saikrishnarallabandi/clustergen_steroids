@@ -1540,7 +1540,9 @@ class VAE_predict_frame_from_contextframes(object):
     input_frame = dy.inputTensor(np.asarray(input_frame))
     ouptut_frame = dy.inputTensor(output_frame)
 
-    # Get output           
+    # Get output   
+    dy.tanh(W_frame * input_frame + b_frame)
+    W_f0 * dy.tanh(W_frame * input_frame + b_frame)         
     src_output =  dy.tanh(W_f0 * dy.tanh(W_frame * input_frame + b_frame) + b_f0 ) 
 
     # Get the mean and diagonal log covariance
