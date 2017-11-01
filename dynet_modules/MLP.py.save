@@ -73,7 +73,6 @@ class TwoLayerMLP(object):
 
 class NLayerMLP(object):
   # Accepts a list as input which indicates the number of neurons in each hidden layer
-
   def __init__(self, model, num_input, hidden_layer_list, num_out, act=dy.tanh):
     self.number_of_layers = len(hidden_layer_list)
     num_hidden_1 = hidden_layer_list[0]
@@ -98,9 +97,6 @@ class NLayerMLP(object):
     self.spec = (num_input, hidden_layer_list, num_out, act)
 
   def calculate_loss(self, input, output, classification_flag):
-    # Renew the computation graph
-    #dy.renew_cg()
- 
     weight_matrix_array = []
     biases_array = []
     for (W,b) in zip(self.weight_matrix_array, self.biases_array):
@@ -109,8 +105,7 @@ class NLayerMLP(object):
     g = self.act
     w = weight_matrix_array[0]
     b = biases_array[0]
-    intermediate = dy.affine_transform([b, w,input])
-    #intermediate = w*input + b
+    intermediate = dy.affine_transform(b, w,g(
     activations = [intermediate]
     for (W,b) in zip(weight_matrix_array[1:], biases_array[1:]):
         pred = dy.affine_transform([b, W, g(activations[-1])])
@@ -136,7 +131,10 @@ class NLayerMLP(object):
     for (W,b) in zip(weight_matrix_array[1:], biases_array[1:]):
         pred =  (W * g(activations[-1]))  + b
         activations.append(pred)
-    return pred
+    if classification_flag == 1:
+       return dy.softmax(pred)
+    else:
+       return pred
 
   # support saving:
   def param_collection(self): return self.pc
