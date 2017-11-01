@@ -1477,8 +1477,8 @@ class VAE_predict_f0_from_frames(object):
     pred = dy.affine_transform([b_out, W_out, z])
     return pred
 
-# This class uses frame information to predict the f0 value
-class VAE_predict_f0_from_frames(object):
+# This class uses frame information to predict the frame value
+class VAE_predict_frame_from_contextframes(object):
   def __init__(self, model, num_input, num_hidden, num_output, num_latent, act=dy.tanh):
     self.num_input = int(num_input)
     self.num_hidden = int(num_hidden)
@@ -1518,7 +1518,7 @@ class VAE_predict_f0_from_frames(object):
   def mlp(self, x, W, V, b):
     return V * dy.tanh(W * x + b)
   
-  def calculate_loss_frame(self, frame):
+  def calculate_loss_frame(self, input_frame, output_frame):
 
     ## Renew the computation graph
     dy.renew_cg()
@@ -1537,11 +1537,11 @@ class VAE_predict_f0_from_frames(object):
     b_f0 = dy.parameter(self.b_f0)
     W_out = dy.parameter(self.W_out)
     b_out = dy.parameter(self.b_out)
-    f0 = dy.inputTensor(np.asarray(frame[0]))
-    frame = dy.inputTensor(frame[1:])
+    input_frame = dy.inputTensor(np.asarray(input_frame))
+    ouptut_frame = dy.inputTensor(output_frame)
 
     # Get output           
-    src_output =  dy.tanh(W_f0 * dy.tanh(W_frame * frame + b_frame) + b_f0 ) 
+    src_output =  dy.tanh(W_f0 * dy.tanh(W_frame * input_frame + b_frame) + b_f0 ) 
 
     # Get the mean and diagonal log covariance
     mu = self.mlp(src_output , W_mean, V_mean, b_mean)
@@ -1555,7 +1555,7 @@ class VAE_predict_f0_from_frames(object):
 
     # Calculate the reconstruction loss
     pred = dy.affine_transform([b_out, W_out, z])
-    RECON_loss = dy.l2_norm(f0 - pred)
+    RECON_loss = dy.l2_norm(ouptut_frame - pred)
 
     return KL_loss,  RECON_loss
 
@@ -1575,11 +1575,11 @@ class VAE_predict_f0_from_frames(object):
     b_f0 = dy.parameter(self.b_f0)
     W_out = dy.parameter(self.W_out)
     b_out = dy.parameter(self.b_out)
-    f0 = dy.inputTensor(np.asarray(frame[0]))
-    frame = dy.inputTensor(frame[1:])
+    input_frame = dy.inputTensor(np.asarray(input_frame))
+    output_frame = dy.inputTensor(output_frame)
 
     # Get output           
-    src_output =  dy.tanh(W_f0 * dy.tanh(W_frame * frame + b_frame) + b_f0 )
+    src_output =  dy.tanh(W_f0 * dy.tanh(W_frame * input_frame + b_frame) + b_f0 )
 
     # Get the mean and diagonal log covariance
     mu = self.mlp(src_output , W_mean, V_mean, b_mean)
@@ -1595,5 +1595,5 @@ class VAE_predict_f0_from_frames(object):
     pred = dy.affine_transform([b_out, W_out, z])
     return pred
 
-A
+
 
