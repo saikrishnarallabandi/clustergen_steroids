@@ -1499,7 +1499,7 @@ class VAE_predict_frame_from_contextframes(object):
     self.b_var_p = model.add_parameters((num_hidden_q))
     print "Loaded params for variances"
  
-    self.W_in = model.add_parameters((num_hidden, num_input-1))
+    self.W_in = model.add_parameters((num_hidden, num_input))
     self.b_in = model.add_parameters((num_hidden))
     self.W_hid = model.add_parameters((num_hidden, num_hidden))
     self.b_hid = model.add_parameters((num_hidden))
