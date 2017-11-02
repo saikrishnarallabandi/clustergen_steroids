@@ -1,0 +1,17 @@
+API calls for the DNN file:
+
+Basically, initiate with the following arguments:
+Model 
+Number of input dimensions
+Array with hidden neurons per layer
+Array with activations per layer
+Number of output dimensions
+
+Methods available:
+calculate_loss(input, output) -> Does forward prop and returns the loss
+predict(input) -> Does forward prop and returns the predicted vector
+
+Example:
+m = dy.Model()
+dnn = FeedForwardNeuralNet(m, 56, [ 100,230, 512], 56, [dy.tanh, dy,tanh, dy,tanh])
+
