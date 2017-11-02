@@ -105,16 +105,36 @@ class NLayerMLP(object):
     g = self.act
     w = weight_matrix_array[0]
     b = biases_array[0]
-    intermediate = w*input + b
+    intermediate = dy.affine_transform(b, w,g(
     activations = [intermediate]
     for (W,b) in zip(weight_matrix_array[1:], biases_array[1:]):
-        pred =  (W * g(activations[-1]))  + b
+        pred = dy.affine_transform([b, W, g(activations[-1])])
+        #pred =  (W * g(activations[-1]))  + b
         activations.append(pred)  
     if classification_flag == 1:
        return dy.softmax(pred)
     else:
        losses = output - pred
        return dy.l2_norm(losses)
+
+  def predict(self, input):
+    weight_matrix_array = []
+    biases_array = []
+    for (W,b) in zip(self.weight_matrix_array, self.biases_array):
+         weight_matrix_array.append(dy.parameter(W))
+         biases_array.append(dy.parameter(b))
+    g = self.act
+    w = weight_matrix_array[0]
+    b = biases_array[0]
+    intermediate = w*input + b
+    activations = [intermediate]
+    for (W,b) in zip(weight_matrix_array[1:], biases_array[1:]):
+        pred =  (W * g(activations[-1]))  + b
+        activations.append(pred)
+    if classification_flag == 1:
+       return dy.softmax(pred)
+    else:
+       return pred
 
   # support saving:
   def param_collection(self): return self.pc
