@@ -66,16 +66,18 @@ class FeedForwardNeuralNet(object):
   def predict(self, input):
     weight_matrix_array = []
     biases_array = []
-    for (W,b) in zip(self.weight_matrix_array, self.biases_array):
+    acts = []
+    for (W,b, act) in zip(self.weight_matrix_array, self.biases_array, self.act):
          weight_matrix_array.append(dy.parameter(W))
          biases_array.append(dy.parameter(b))
-    g = self.act
+         acts.append(act)
+    g = acts[0]
     w = weight_matrix_array[0]
     b = biases_array[0]
-    intermediate = w*input + b
+    intermediate = g(w*input + b)
     activations = [intermediate]
-    for (W,b) in zip(weight_matrix_array[1:], biases_array[1:]):
-        pred =  (W * g(activations[-1]))  + b
+    for (W,b, act) in zip(weight_matrix_array[1:], biases_array[1:], acts):
+        pred =  act(W * activations[-1]  + b)
         activations.append(pred)
         return pred
 
