@@ -96,13 +96,12 @@ class NLayerMLP(object):
     self.act = act
     self.spec = (num_input, hidden_layer_list, num_out, act)
 
-  def __call__(self, input, output, classification_flag):
+  def calculate_loss(self, input, output, classification_flag):
     weight_matrix_array = []
     biases_array = []
     for (W,b) in zip(self.weight_matrix_array, self.biases_array):
          weight_matrix_array.append(dy.parameter(W))
          biases_array.append(dy.parameter(b)) 
-    #print " The number of total layers is ", len(weight_matrix_array)
     g = self.act
     w = weight_matrix_array[0]
     b = biases_array[0]
