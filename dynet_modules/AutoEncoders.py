@@ -1436,7 +1436,7 @@ class VAE_predict_f0_from_frames(object):
     z = self.reparameterize(mu, log_var)
 
     # Calculate the reconstruction loss
-    pred = dy.affine_transform([b_out, W_out, z])
+    pred = dy.tanh(dy.affine_transform([b_out, W_out, z]))
     RECON_loss = dy.l2_norm(f0 - pred)
 
     return KL_loss,  RECON_loss
@@ -1474,7 +1474,7 @@ class VAE_predict_f0_from_frames(object):
     z = self.reparameterize(mu, log_var)
 
     # Calculate the reconstruction loss
-    pred = dy.affine_transform([b_out, W_out, z])
+    pred = dy.tanh(dy.affine_transform([b_out, W_out, z]))
     return pred, frame
 
 # This class uses frame information to predict the frame value
