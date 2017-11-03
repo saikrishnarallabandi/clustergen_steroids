@@ -60,7 +60,7 @@ class FeedForwardNeuralNet(object):
     for (W,b,g) in zip(weight_matrix_array[1:], biases_array[1:], acts[1:]):
         pred = g(dy.affine_transform([b, W, activations[-1]]))
         activations.append(pred)  
-    #print output.value(), pred.value()
+    
     losses = output - pred
     return dy.l2_norm(losses)
 
