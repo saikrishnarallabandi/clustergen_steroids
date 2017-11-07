@@ -46,6 +46,7 @@ class FeedForwardNeuralNet(object):
     return dy.tanh(dy.affine_transform([b1,W1,exp]))
 
   def calculate_loss(self, input, output):
+    #dy.renew_cg()
     weight_matrix_array = []
     biases_array = []
     for (W,b) in zip(self.weight_matrix_array, self.biases_array):

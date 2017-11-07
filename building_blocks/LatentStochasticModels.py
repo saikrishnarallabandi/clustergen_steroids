@@ -2,6 +2,7 @@ import dynet as dy
 import os
 import pickle
 import numpy as np
+from DNNs import *
 
 # This is a very basic autoencoder with no fancy regularizers
 class AutoEncoder(object):
@@ -1487,7 +1488,7 @@ class VAE_predict_frame_from_contextframes(object):
     self.num_latent = num_latent
     print "Loaded params"
 
-   # MLP parameters
+    # MLP parameters
     num_hidden_q = self.num_latent
     self.W_mean_p = model.add_parameters((num_hidden_q, num_hidden))
     self.V_mean_p = model.add_parameters((num_hidden, num_hidden_q))
@@ -1600,3 +1601,104 @@ class VAE_predict_frame_from_contextframes(object):
 
 
 
+class VariationalEncoderDecoder(object):
+   
+  def __init__(self, model, args):
+    self.pc = model.add_subcollection()
+    self.args = args
+    self.num_input = int(args[0])
+    self.hidden_list = args[1]
+    self.num_latent = int(args[2])
+    self.num_output = int(args[3])
+    self.act = args[4]
+    self.model = model
+    
+    # Use DNN as encoder and decoder
+    #enc_dnn = FeedForwardNeuralNet(model, [self.num_input, self.hidden_list,self.num_latent, self.act])
+    #dec_dnn = FeedForwardNeuralNet(model, [self.num_latent, self.hidden_list,self.num_output, self.act])
+
+    num_hidden = self.hidden_list[-1] # This is not really  hum_hidden, you see
+    self.W_mean_p = model.add_parameters((self.num_latent, num_hidden))
+    self.V_mean_p = model.add_parameters((num_hidden, self.num_latent))
+    self.b_mean_p = model.add_parameters((self.num_latent))
+    print "Loaded params for means"
+   
+    self.W_var_p = model.add_parameters((self.num_latent, num_hidden))
+    self.V_var_p = model.add_parameters((num_hidden, self.num_latent))
+    self.b_var_p = model.add_parameters((self.num_latent))
+    print "Loaded params for variances"
+
+  def mlp(self, x, W, V, b):
+       return V * dy.tanh(W * x + b)
+
+  def reparameterize(self, mu, logvar):
+       d = mu.dim()[0][0]
+       eps = dy.random_normal(d)
+       std = dy.exp(logvar * 0.5)
+       return mu + dy.cmult(std, eps)
+
+  def calculate_loss_basic(self, input, output):
+       # Renew the computation graph
+       #dy.renew_cg()
+
+       # Instantiate the params
+       W_mean = dy.parameter(self.W_mean_p)
+       V_mean = dy.parameter(self.V_mean_p)
+       b_mean = dy.parameter(self.b_mean_p)
+       W_var = dy.parameter(self.W_var_p)
+       V_var = dy.parameter(self.V_var_p)
+       b_var = dy.parameter(self.b_var_p)
+       num_hidden = self.hidden_list[-1]
+       
+       enc_dnn = FeedForwardNeuralNet(self.model, [self.num_input, self.hidden_list, num_hidden, self.act])
+       dec_dnn = FeedForwardNeuralNet(self.model, [num_hidden, self.hidden_list,self.num_output, self.act])
+
+    
+       # Get the output from encoder
+       src_output = enc_dnn.predict(input)
+
+       # Get the mean and log variance
+       mu = self.mlp(src_output , W_mean, V_mean, b_mean)
+       log_var = self.mlp(src_output , W_mean, V_mean, b_mean)       
+    
+       # Compute the KL Divergence loss
+       kl_loss = -0.5 * dy.sum_elems( 1 + log_var - dy.pow(mu, dy.inputVector([2])) - dy.exp(log_var))
+
+       # Reparameterize
+       z = self.reparameterize(mu, log_var)
+       
+       return kl_loss, dec_dnn.calculate_loss(z , output)
+
+
+  def predict(self, input):
+       # Renew the computation graph
+       #dy.renew_cg()
+
+       # Instantiate the params
+       W_mean = dy.parameter(self.W_mean_p)
+       V_mean = dy.parameter(self.V_mean_p)
+       b_mean = dy.parameter(self.b_mean_p)
+       W_var = dy.parameter(self.W_var_p)
+       V_var = dy.parameter(self.V_var_p)
+       b_var = dy.parameter(self.b_var_p)
+       num_hidden = self.hidden_list[-1]
+
+
+       enc_dnn = FeedForwardNeuralNet(self.model, [self.num_input, self.hidden_list, num_hidden, self.act])
+       dec_dnn = FeedForwardNeuralNet(self.model, [num_hidden, self.hidden_list,self.num_output, self.act])
+
+
+       # Get the output from encoder
+       src_output = enc_dnn.predict(input)
+
+       # Get the mean and log variance
+       mu = self.mlp(src_output , W_mean, V_mean, b_mean)
+       log_var = self.mlp(src_output , W_mean, V_mean, b_mean)
+ 
+       # Compute the KL Divergence loss
+       #kl_loss = -0.5 * dy.sum_elems(1 + log_var - dy.pow(mu, dy.inputVector([2])) - dy.exp(log_var))
+
+       # Reparameterize
+       z = self.reparameterize(mu, log_var)
+
+       return dec_dnn.predict(z)
