@@ -1612,10 +1612,11 @@ class VariationalEncoderDecoder(object):
     self.num_output = int(args[3])
     self.act = args[4]
     self.model = model
-    
+    num_hidden = self.hidden_list[-1]    
+
     # Use DNN as encoder and decoder
-    #enc_dnn = FeedForwardNeuralNet(model, [self.num_input, self.hidden_list,self.num_latent, self.act])
-    #dec_dnn = FeedForwardNeuralNet(model, [self.num_latent, self.hidden_list,self.num_output, self.act])
+    self.enc_dnn = FeedForwardNeuralNet(model, [self.num_input, self.hidden_list, num_hidden, self.act])
+    self.dec_dnn = FeedForwardNeuralNet(model, [num_hidden, self.hidden_list,self.num_output, self.act])
 
     num_hidden = self.hidden_list[-1] # This is not really  hum_hidden, you see
     self.W_mean_p = model.add_parameters((self.num_latent, num_hidden))
@@ -1638,8 +1639,6 @@ class VariationalEncoderDecoder(object):
        return mu + dy.cmult(std, eps)
 
   def calculate_loss_basic(self, input, output):
-       # Renew the computation graph
-       #dy.renew_cg()
 
        # Instantiate the params
        W_mean = dy.parameter(self.W_mean_p)
@@ -1650,9 +1649,8 @@ class VariationalEncoderDecoder(object):
        b_var = dy.parameter(self.b_var_p)
        num_hidden = self.hidden_list[-1]
        
-       enc_dnn = FeedForwardNeuralNet(self.model, [self.num_input, self.hidden_list, num_hidden, self.act])
-       dec_dnn = FeedForwardNeuralNet(self.model, [num_hidden, self.hidden_list,self.num_output, self.act])
-
+       enc_dnn = self.enc_dnn
+       dec_dnn = self.dec_dnn
     
        # Get the output from encoder
        src_output = enc_dnn.predict(input)
@@ -1683,10 +1681,8 @@ class VariationalEncoderDecoder(object):
        b_var = dy.parameter(self.b_var_p)
        num_hidden = self.hidden_list[-1]
 
-
-       enc_dnn = FeedForwardNeuralNet(self.model, [self.num_input, self.hidden_list, num_hidden, self.act])
-       dec_dnn = FeedForwardNeuralNet(self.model, [num_hidden, self.hidden_list,self.num_output, self.act])
-
+       enc_dnn = self.enc_dnn
+       dec_dnn = self.dec_dnn
 
        # Get the output from encoder
        src_output = enc_dnn.predict(input)
