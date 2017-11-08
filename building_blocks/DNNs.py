@@ -129,3 +129,53 @@ if debug:
   print "B:" , b.value()
 
   assert s.value() == b.value() 
+
+
+class LoggingCallback(Callback, location):
+    """Callback that logs message at end of epoch.
+    """
+    def __init__(self, print_fcn="print", location):
+        Callback.__init__(self)
+        self.print_fcn = print_fcn
+        self.location = location
+
+    def on_epoch_end(self, epoch, logs={}, location):
+ 
+        # If  first epoch, remove the log file
+        if epoch == 0:
+            g = open(location + '/logs_' + arch + '.txt','w')
+            g.close()
+
+        # Log the progress
+        msg = "{Epoch: %i} %s" % (epoch, ", ".join("%s: %f" % (k, v) for k, v in logs.items()))
+        self.print_fcn(msg)
+        with open(location + '/logs_' +  arch + '.txt','a') as g:
+            g.write(msg + '\n')
+        
+        # Save the model every 5 epochs
+        if epoch % 5 == 1:
+             print self.model
+             self.model.save(location + '/models/feature_mapper_' + arch + '.h5')            
+
+
+
+class FeedForwardNetKeras(object):
+
+    def __init__(self, model, args):
+      self.num_input = int(args[0])
+      self.num_output = int(args[2])
+      self.hidden_list = args[1]
+      self.act = args[3]
+      self.model = model
+      self.number_of_layers = len(self.hidden_list)
+      self.batch_size = 32
+       
+      model.add(Dense(self.num_input,kernel_initializer='normal', activation='tanh'))      
+      for hidden in self.hidden_list:
+           model.add(Dense(hidden, kernel_initializer='normal', activation='tanh')
+      model.add(Dense(self.num_output, kernel_initializer='normal', activation='tanh'))
+
+    def fit_model(self, input, output, epochs, location)
+      model.fit(input, output, epochs=epochs, batch_size=self.batch_size, shuffle=True, callbacks=[LoggingCallback(logging.info, location)])    
+  
+
