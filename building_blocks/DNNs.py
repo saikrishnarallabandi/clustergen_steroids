@@ -2,6 +2,18 @@ import dynet as dy
 import os
 import pickle
 import numpy as np
+import keras
+from keras.layers import Input, Dense
+from keras.constraints import maxnorm
+from keras.layers.core import Dropout
+from keras.optimizers import SGD
+from keras.models import Model, Sequential
+import numpy as np
+from keras.models import load_model
+import os,sys
+from sklearn import preprocessing
+import pickle, logging
+from keras.callbacks import *
 
 debug = 0
 
@@ -131,15 +143,15 @@ if debug:
   assert s.value() == b.value() 
 
 
-class LoggingCallback(Callback, location):
+class LoggingCallback(Callback):
     """Callback that logs message at end of epoch.
     """
-    def __init__(self, print_fcn="print", location):
+    def __init__(self, location, print_fcn="print"):
         Callback.__init__(self)
         self.print_fcn = print_fcn
-        self.location = location
+        self.location = '/tmp'
 
-    def on_epoch_end(self, epoch, logs={}, location):
+    def on_epoch_end(self, epoch,location, logs={}):
  
         # If  first epoch, remove the log file
         if epoch == 0:
@@ -169,13 +181,16 @@ class FeedForwardNetKeras(object):
       self.model = model
       self.number_of_layers = len(self.hidden_list)
       self.batch_size = 32
-       
+
+      model.add(Dropout(0.0, input_shape=(self.num_input,))) 
       model.add(Dense(self.num_input,kernel_initializer='normal', activation='tanh'))      
       for hidden in self.hidden_list:
-           model.add(Dense(hidden, kernel_initializer='normal', activation='tanh')
+           model.add(Dense(hidden, kernel_initializer='normal', activation='tanh'))
       model.add(Dense(self.num_output, kernel_initializer='normal', activation='tanh'))
 
-    def fit_model(self, input, output, epochs, location)
+    def fit_model(self, input, output, epochs, location):
+      sgd = SGD(lr=0.01, momentum=0.9, decay=1e-6, nesterov=False)
+      model.compile(optimizer=sgd, loss='mse')
       model.fit(input, output, epochs=epochs, batch_size=self.batch_size, shuffle=True, callbacks=[LoggingCallback(logging.info, location)])    
   
 
