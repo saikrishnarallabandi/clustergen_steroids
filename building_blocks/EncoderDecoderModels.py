@@ -74,7 +74,7 @@ class EncoderDecoderModel(object):
        if debug_time :
            print "Applying Encoder"
        # Renew the CG
-       dy.renew_cg()
+       #dy.renew_cg()
            
        # Apply forward LSTM
        init_state_fwd = self.fwd_lstm_builder.initial_state()
