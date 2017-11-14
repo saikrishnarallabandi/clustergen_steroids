@@ -36,6 +36,16 @@ class EncoderDecoderModel(object):
         self.attention_w2 = self.model.add_parameters((self.num_attention, self.num_hidden*2*self.num_layers))
         self.attention_v = self.model.add_parameters((1, self.num_attention))
 
+
+        # support saving:
+        def param_collection(self): return self.pc
+
+        @staticmethod
+        def from_spec(spec, model):
+           num_layers, num_input, hidden_list, num_output, act = spec
+           return EncoderDecoderModel(model, [num_layers,num_input, hidden_list, num_attention, num_output, act])
+
+
     def attend(self, w1dt, vectors,state):
         import time
         start = time.time()
