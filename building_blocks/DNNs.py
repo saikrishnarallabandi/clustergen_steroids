@@ -77,6 +77,28 @@ class FeedForwardNeuralNet(object):
     losses = output - pred
     return dy.l2_norm(losses)
 
+  def calculate_loss_classification(self, input, output):
+    #dy.renew_cg()
+    weight_matrix_array = []
+    biases_array = []
+    for (W,b) in zip(self.weight_matrix_array, self.biases_array):
+         weight_matrix_array.append(dy.parameter(W))
+         biases_array.append(dy.parameter(b))
+    acts = self.act
+    w = weight_matrix_array[0]
+    b = biases_array[0]
+    act = acts[0]
+    intermediate = act(dy.affine_transform([b, w, input]))
+    activations = [intermediate]
+    for (W,b,g) in zip(weight_matrix_array[1:], biases_array[1:], acts[1:]):
+        pred = g(dy.affine_transform([b, W, activations[-1]]))
+        activations.append(pred)
+    #print output.value(), pred.value()
+    losses = dy.binary_log_loss(pred, output)
+    return losses
+
+
+
   def predict(self, input):
     weight_matrix_array = []
     biases_array = []
