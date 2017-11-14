@@ -36,20 +36,17 @@ class EncoderDecoderModel(object):
         self.attention_w2 = self.model.add_parameters((self.num_attention, self.num_hidden*2*self.num_layers))
         self.attention_v = self.model.add_parameters((1, self.num_attention))
 
-    def attend(self, vectors, state):
+    def attend(self, w1dt, vectors,state):
         import time
         start = time.time()
         if debug:
             print "In attention"
-        w1 = dy.parameter(self.attention_w1)
         w2 = dy.parameter(self.attention_w2)
         v = dy.parameter(self.attention_v)
         attention_weights = []
 
         if debug:
             print "State output: ", list(state.h())
-        w1dt = w1 * vectors
-        #print "Calculated w1dt"
         end = time.time()
         #print "Time took is : ", end - start
         start = end
@@ -112,17 +109,18 @@ class EncoderDecoderModel(object):
        if debug:
            print "First input to decoder: ", len(dy.concatenate([dy.vecInput(self.num_hidden*2),self.M[0]]).value())
        state_decoder = self.decoder_lstm_builder.initial_state().add_input(dy.concatenate([dy.vecInput(self.num_hidden*2), self.M[0]]))
-       
        last_embeddings = self.M[0]
        if debug:
             print "Length of last embeddings: ", len(last_embeddings.value())
        output = dy.inputTensor(output)
        loss = []
+       w1 = dy.parameter(self.attention_w1)
+       w1dt = w1 * bidirectional_vectors
        for output_frame in output:
          start = time.time()
          if debug_time :       
            print "Going to attention"
-         attended_encoding = self.attend(bidirectional_vectors,state_decoder)
+         attended_encoding = self.attend(w1dt, bidirectional_vectors, state_decoder)
          end = time.time()
          if debug_time :       
            print "Returned from attention ", end - start
