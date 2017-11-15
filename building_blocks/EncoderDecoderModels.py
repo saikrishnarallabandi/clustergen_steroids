@@ -168,9 +168,9 @@ class EncoderDecoderModel(object):
          start = end
          #state_decoder = state_decoder.add_input(dy.concatenate([dy.vecInput(self.num_hidden*2),last_embeddings]))
          ### Predict the frames now
-         ### Adding because there was a griendt inf error   
+         ### Adding because there was a griendt inf error  15 Nov 2017 
          frame_predicted = w_out * state_decoder.output() + b_out
-         frame_predicted = dy.tanh(w_out * state_decoder.output() + b_out)
+         frame_predicted = dy.rectify(w_out * state_decoder.output() + b_out)
          last_embeddings = frame_predicted
          if debug_time :       
            print "Obtained last embeddings, ", end - start
