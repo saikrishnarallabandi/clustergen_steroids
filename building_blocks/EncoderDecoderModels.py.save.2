@@ -6,7 +6,6 @@ import time
 
 debug = 0
 debug_time = 0
-
 class EncoderDecoderModel(object):
 
     def __init__(self, model, args):
@@ -22,13 +21,13 @@ class EncoderDecoderModel(object):
         self.num_embeddings = self.num_output
 
         # Lookup parameter to store the end of sentence symbol
-        self.M = self.args[6]
-        self.spec = (self.num_layers,self.num_input, self.num_hidden, self.num_attention, self.num_output, self.act)
-
+        self.M = self.model.add_lookup_parameters((1, self.num_embeddings))
+        
         # Add the LSTMs
         self.fwd_lstm_builder = dy.LSTMBuilder(self.num_layers, self.num_input, self.num_hidden, model) 
         self.bwd_lstm_builder = dy.LSTMBuilder(self.num_layers, self.num_input, self.num_hidden, model)
         self.decoder_lstm_builder = dy.LSTMBuilder(self.num_layers,self.num_hidden*2+self.num_embeddings, self.num_hidden, model)
+        #self.decoder_lstm_builder = dy.LSTMBuilder(self.num_layers,self.num_embeddings, self.num_hidden, model)
         self.w_decoder = self.model.add_parameters((self.num_output, self.num_hidden))
         self.b_decoder = self.model.add_parameters((self.num_output))
 
@@ -36,29 +35,6 @@ class EncoderDecoderModel(object):
         self.attention_w1 = self.model.add_parameters((self.num_attention, self.num_hidden*2))
         self.attention_w2 = self.model.add_parameters((self.num_attention, self.num_hidden*2*self.num_layers))
         self.attention_v = self.model.add_parameters((1, self.num_attention))
-
-    @staticmethod
-    def user_save_model(path, model, M):
-        dy.save(path + '/edm', [model,M])
-        #with open(path + '/params.pkl', 'wb') as f: 
-        #       pickle.dump(M , f)
-
-    @staticmethod
-    def user_load_model(path, model):
-        [edm] = dy.load(path + '/edm', model)
-        with open(path + '/params.pkl', 'rb') as f:
-            M = pickle.load(f)
-        return EncoderDecoderModel(model, [num_layers,num_input, hidden_list, num_attention, num_output, act, dy.inputTensor(M)])
-
-    # support saving:
-    def param_collection(self): return self.pc
-
-    @staticmethod
-    def from_spec(spec, model):
-           num_layers, num_input, hidden_list, num_output, act = spec
-                 
-           return EncoderDecoderModel(model, [num_layers,num_input, hidden_list, num_attention, num_output, act])
-
 
     def attend(self, w1dt, vectors,state):
         import time
@@ -75,6 +51,7 @@ class EncoderDecoderModel(object):
         #print "Time took is : ", end - start
         start = end
         w2dt = w2 * dy.concatenate(list(state.s()))
+        w2dt = w2 * state.output()
         #print "Calculated w2dt"
         end = time.time()
         #print "Time takes is: ", end - start
@@ -98,7 +75,7 @@ class EncoderDecoderModel(object):
        if debug_time :
            print "Applying Encoder"
        # Renew the CG
-       #dy.renew_cg()
+       dy.renew_cg()
            
        # Apply forward LSTM
        init_state_fwd = self.fwd_lstm_builder.initial_state()
