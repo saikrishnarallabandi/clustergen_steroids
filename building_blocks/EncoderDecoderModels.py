@@ -37,6 +37,10 @@ class EncoderDecoderModel(object):
         self.attention_w2 = self.model.add_parameters((self.num_attention, self.num_hidden*2*self.num_layers))
         self.attention_v = self.model.add_parameters((1, self.num_attention))
 
+    def set_M(self, n):
+        print n
+        self.M = n
+
     @staticmethod
     def user_save_model(path, model, M):
         dy.save(path + '/edm', [model,M])
@@ -45,19 +49,23 @@ class EncoderDecoderModel(object):
 
     @staticmethod
     def user_load_model(path, model):
-        [edm] = dy.load(path + '/edm', model)
-        with open(path + '/params.pkl', 'rb') as f:
-            M = pickle.load(f)
-        return EncoderDecoderModel(model, [num_layers,num_input, hidden_list, num_attention, num_output, act, dy.inputTensor(M)])
+        edm = dy.load(path + '/edm', model)
+        print "Back from spec"
+        print edm, M
+        #with open(path + '/params.pkl', 'rb') as f:
+        #    M = pickle.load(f)
+        edm.set_M(M)
+        return edm
 
     # support saving:
     def param_collection(self): return self.pc
 
     @staticmethod
     def from_spec(spec, model):
-           num_layers, num_input, hidden_list, num_output, act = spec
-                 
-           return EncoderDecoderModel(model, [num_layers,num_input, hidden_list, num_attention, num_output, act])
+           print spec
+           num_layers, num_input, num_hidden, num_attention, num_output, act = spec
+           print " IN spec"      
+           return EncoderDecoderModel(model, [num_layers,num_input, num_hidden, num_attention, num_output, act, " "])
 
 
     def attend(self, w1dt, vectors,state):
