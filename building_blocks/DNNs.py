@@ -2,18 +2,10 @@ import dynet as dy
 import os
 import pickle
 import numpy as np
-import keras
-from keras.layers import Input, Dense
-from keras.constraints import maxnorm
-from keras.layers.core import Dropout
-from keras.optimizers import SGD
-from keras.models import Model, Sequential
 import numpy as np
-from keras.models import load_model
 import os,sys
 from sklearn import preprocessing
 import pickle, logging
-from keras.callbacks import *
 
 debug = 0
 
@@ -192,27 +184,4 @@ class LoggingCallback(Callback):
              self.model.save(location + '/models/feature_mapper_' + arch + '.h5')            
 
 
-
-class FeedForwardNetKeras(object):
-
-    def __init__(self, model, args):
-      self.num_input = int(args[0])
-      self.num_output = int(args[2])
-      self.hidden_list = args[1]
-      self.act = args[3]
-      self.model = model
-      self.number_of_layers = len(self.hidden_list)
-      self.batch_size = 32
-
-      model.add(Dropout(0.0, input_shape=(self.num_input,))) 
-      model.add(Dense(self.num_input,kernel_initializer='normal', activation='tanh'))      
-      for hidden in self.hidden_list:
-           model.add(Dense(hidden, kernel_initializer='normal', activation='tanh'))
-      model.add(Dense(self.num_output, kernel_initializer='normal', activation='tanh'))
-
-    def fit_model(self, input, output, epochs, location):
-      sgd = SGD(lr=0.01, momentum=0.9, decay=1e-6, nesterov=False)
-      model.compile(optimizer=sgd, loss='mse')
-      model.fit(input, output, epochs=epochs, batch_size=self.batch_size, shuffle=True, callbacks=[LoggingCallback(logging.info, location)])    
-  
 
