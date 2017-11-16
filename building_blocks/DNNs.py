@@ -157,31 +157,5 @@ if debug:
   assert s.value() == b.value() 
 
 
-class LoggingCallback(Callback):
-    """Callback that logs message at end of epoch.
-    """
-    def __init__(self, location, print_fcn="print"):
-        Callback.__init__(self)
-        self.print_fcn = print_fcn
-        self.location = '/tmp'
-
-    def on_epoch_end(self, epoch,location, logs={}):
- 
-        # If  first epoch, remove the log file
-        if epoch == 0:
-            g = open(location + '/logs_' + arch + '.txt','w')
-            g.close()
-
-        # Log the progress
-        msg = "{Epoch: %i} %s" % (epoch, ", ".join("%s: %f" % (k, v) for k, v in logs.items()))
-        self.print_fcn(msg)
-        with open(location + '/logs_' +  arch + '.txt','a') as g:
-            g.write(msg + '\n')
-        
-        # Save the model every 5 epochs
-        if epoch % 5 == 1:
-             print self.model
-             self.model.save(location + '/models/feature_mapper_' + arch + '.h5')            
-
 
 
