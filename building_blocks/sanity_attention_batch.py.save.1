@@ -1,0 +1,180 @@
+import dynet as dy
+import random
+
+debug = 1
+
+EOS = "<EOS>"
+characters = list("abcdefghijklmnopqrstuvwxyz. ")
+characters.append(EOS)
+
+int2char = list(characters)
+char2int = {c:i for i,c in enumerate(characters)}
+
+VOCAB_SIZE = len(characters)
+
+LSTM_NUM_OF_LAYERS = 2
+EMBEDDINGS_SIZE = 32
+STATE_SIZE = 32
+ATTENTION_SIZE = 32
+
+model = dy.Model()
+
+enc_fwd_lstm = dy.LSTMBuilder(LSTM_NUM_OF_LAYERS, EMBEDDINGS_SIZE, STATE_SIZE, model)
+enc_bwd_lstm = dy.LSTMBuilder(LSTM_NUM_OF_LAYERS, EMBEDDINGS_SIZE, STATE_SIZE, model)
+
+dec_lstm = dy.LSTMBuilder(LSTM_NUM_OF_LAYERS, STATE_SIZE*2+EMBEDDINGS_SIZE, STATE_SIZE, model)
+input_lookup = model.add_lookup_parameters((VOCAB_SIZE, EMBEDDINGS_SIZE))
+attention_w1 = model.add_parameters( (ATTENTION_SIZE, STATE_SIZE*2))
+attention_w2 = model.add_parameters( (ATTENTION_SIZE, STATE_SIZE*LSTM_NUM_OF_LAYERS*2))
+attention_v = model.add_parameters( (1, ATTENTION_SIZE))
+decoder_w = model.add_parameters( (VOCAB_SIZE, STATE_SIZE))
+decoder_b = model.add_parameters( (VOCAB_SIZE))
+output_lookup = model.add_lookup_parameters((VOCAB_SIZE, EMBEDDINGS_SIZE))
+
+
+def embed_sentences(sentences, flag=0):
+    sentences_new = []
+    global input_lookup
+    global output_lookup
+    if flag == 1:
+      selected_lookup = output_lookup
+    else:
+      selected_lookup = input_lookup
+
+    for sentence in sentences:
+       sentence = [EOS] + list(sentence) + [EOS]
+       sentence = [char2int[c] for c in sentence]
+       sentences_new.append([selected_lookup[char] for char in sentence])
+    if debug:
+      print sentences
+      return sentences_new
+    else:
+      return sentences_new
+
+def encode_sentences(enc_fwd_lstm, enc_bwd_lstm, encodings):
+    if debug:
+       print "Batch: ", encodings
+    encodings_transposed = []
+    masks = []
+    for i in range(len(encodings[0])):
+       encodings_transposed.append([(sent[i] if len(sent)> i else input_lookup[0]) for sent in encodings])
+       mask = [(1 if len(sent)>i else 0) for sent in encodings]
+       masks.append(mask)
+    if debug:
+        print "Transposed Encodings: ", encodings_transposed 
+    encodings_transposed_rev = list(reversed(encodings_transposed))
+    if debug:
+        print "Reversed Encodings: ", encodings_transposed_rev
+
+    state_fwd = enc_fwd_lstm.initial_state()
+    state_bwd = enc_bwd_lstm.initial_state()
+    for (enc, encb) in zip(encodings_transposed, encodings_transposed_rev):
+        enc_fwd_states = state_fwd.add_inputs(enc)
+        enc_bwd_states = state_bwd.add_inputs(encb)
+
+    fwd_vectors = [s.output() for s in enc_fwd_states]
+    bwd_vectors = [s.output() for s in enc_bwd_states]
+    bwd_vectors_rev = list(reversed(bwd_vectors))
+    vectors = [dy.concatenate(list(p)) for p in zip(fwd_vectors, bwd_vectors_rev)]
+    return vectors
+
+def attend(input_mat, state, w1dt):
+    global attention_w2
+    global attention_v
+    w2 = dy.parameter(attention_w2)
+    v = dy.parameter(attention_v)
+
+    w2dt = w2*dy.concatenate(list(state.s()))
+    unnormalized = dy.transpose(v * dy.tanh(dy.colwise_add(w1dt, w2dt)))
+    att_weights = dy.softmax(unnormalized)
+    context = input_mat * att_weights
+    return context
+
+def decode_sentences(dec_lstm, vectors, outputs):
+    w = dy.parameter(decoder_w)
+    b = dy.parameter(decoder_b)
+    w1 = dy.parameter(attention_w1)
+    input_mat = dy.concatenate_cols(vectors)    
+    w1dt = w1 * input_mat
+ 
+    if debug:
+        print "DOTS: ", [char2int['.']] * len(outputs[0])
+        t = output_lookup[char2int['.']*4]
+        print t.value()
+    last_output_embeddings = dy.lookup_batch(output_lookup, [char2int['.']] * len(outputs[0]))       
+    if debug:
+       print "Last Output Embeddings " , last_output_embeddings
+    dec_state = dec_lstm.initial_state().add_inputs(dy.concatenate([dy.vecInput(STATE_SIZE*2), dy.inputVector(last_output_embeddings)]))
+    loss = 0
+
+
+    decodings_transposed = []
+    masks = []
+    for i in range(len(outputs[0])):
+       decodings_transposed.append([(sent[i] if len(sent)> i else output_lookup[0]) for sent in outputs])
+       mask = [(1 if len(sent)>i else 0) for sent in outputs]
+       masks.append(mask)
+    if debug:
+        print "Transposed Decodings: ", decodings_transposed
+
+    for ys in decodings_transposed:
+      vector = dy.concatenate([attend(input_mat, w1dt, dec_state), last_output_embeddings])
+      dec_state = dec_state.add_input(vector)
+            
+def generate(in_seq, enc_fwd_lstm, enc_bwd_lstm, dec_lstm):
+    embedded = embed_sentence(in_seq)
+    encoded = encode_sentence(enc_fwd_lstm, enc_bwd_lstm, embedded)
+
+    w = dy.parameter(decoder_w)
+    b = dy.parameter(decoder_b)
+    w1 = dy.parameter(attention_w1)
+    input_mat = dy.concatenate_cols(encoded)
+    w1dt = None
+    last_output_embeddings = output_lookup[char2int[EOS]]
+    s = dec_lstm.initial_state().add_input(dy.concatenate([dy.vecInput(STATE_SIZE * 2), last_output_embeddings]))
+    out = ''
+    count_EOS = 0
+    for i in range(len(in_seq)*2):
+        if count_EOS == 2: break
+        w1dt = w1dt or w1 * input_mat
+        vector = dy.concatenate([attend(input_mat, s, w1dt), last_output_embeddings])
+        s = s.add_input(vector)
+        out_vector = w * s.output() + b
+        probs = dy.softmax(out_vector).vec_value()
+        next_char = probs.index(max(probs))
+        last_output_embeddings = output_lookup[next_char]
+        if int2char[next_char] == EOS:
+            count_EOS += 1
+            continue
+
+        out += int2char[next_char]
+    return out
+
+
+def get_loss(input_sentences, output_sentences, enc_fwd_lstm, enc_bwd_lstm, dec_lstm):
+    dy.renew_cg()
+    embedded = embed_sentences(input_sentences)
+    encoded = encode_sentences(enc_fwd_lstm, enc_bwd_lstm, embedded)
+    embedded = embed_sentences(output_sentences,1)
+    decode_sentences(dec_lstm, encoded, output_sentences)
+    #return decode(dec_lstm, encoded, output_sentence)
+
+
+def train(model, sentences):
+    trainer = dy.SimpleSGDTrainer(model)
+    for i in range(1):
+        get_loss(sentences, sentences, enc_fwd_lstm, enc_bwd_lstm, dec_lstm)
+        '''
+        loss = get_loss(sentences, sentences, enc_fwd_lstm, enc_bwd_lstm, dec_lstm)
+        loss_value = loss.value()
+        loss.backward()
+        trainer.update()
+        if i % 20 == 0:
+            print(loss_value)
+            print(generate(sentence, enc_fwd_lstm, enc_bwd_lstm, dec_lstm))
+        '''
+
+sentences = ["abcd", "de", "wxy"]
+sentences.sort(key=lambda x: -len(x))
+print sentences
+train(model, sentences)
