@@ -20,7 +20,7 @@ class falcon_heavy(object):
       self.generic_layer_list = args.generic_layer_list
       self.postspecificlayers = args.postspecificlayers
       self.speakers = args.speakers
-      self.number_of_layers = 1 + self.num_hidden + 1
+      self.number_of_layers = 1 + len(self.generic_layer_list) + len(self.postspecificlayers) + 1
       num_hidden_1 = self.generic_layers[0]
       self.act = args.act
 
@@ -80,8 +80,12 @@ class falcon_heavy(object):
          act = acts[0]
          intermediate = act(dy.affine_transform([b, w, input]))
          activations = [intermediate]
+         count = 0
          for (W,b,g) in zip(weight_matrix_array[1:], biases_array[1:], acts[1:]):
-            pred = g(dy.affine_transform([b, W, activations[-1]]))
+            if count == self.number_of_layers:
+                  pred = g(dy.affine_transform([b, W, activations[-1]+input  ]))
+            else:     
+                  pred = g(dy.affine_transform([b, W, activations[-1]]))
             activations.append(pred)  
             losses = output - pred
          return dy.l2_norm(losses)
