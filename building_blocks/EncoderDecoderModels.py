@@ -1,6 +1,8 @@
+import dynet_config
+dynet_config.set_gpu()
 import dynet as dy
 dyparams = dy.DynetParams()
-dyparams.set_mem(2000)
+dyparams.set_mem(8000)
 dyparams.set_autobatch(True)
 import os
 import pickle
