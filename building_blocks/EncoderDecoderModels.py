@@ -31,9 +31,9 @@ class EncoderDecoderModel(object):
         self.spec = (self.num_layers,self.num_input, self.num_hidden, self.num_attention, self.num_output, self.act)
 
         # Add the LSTMs
-        self.fwd_lstm_builder = dy.LSTMBuilder(self.num_layers, self.num_input, self.num_hidden, model) 
-        self.bwd_lstm_builder = dy.LSTMBuilder(self.num_layers, self.num_input, self.num_hidden, model)
-        self.decoder_lstm_builder = dy.LSTMBuilder(self.num_layers,self.num_hidden*2+self.num_embeddings, self.num_hidden, model)
+        self.fwd_lstm_builder = dy.CompactVanillaLSTMBuilder(self.num_layers, self.num_input, self.num_hidden, model) 
+        self.bwd_lstm_builder = dy.CompactVanillaLSTMBuilder(self.num_layers, self.num_input, self.num_hidden, model)
+        self.decoder_lstm_builder = dy.CompactVanillaLSTMBuilder(self.num_layers,self.num_hidden*2+self.num_embeddings, self.num_hidden, model)
         self.w_decoder = self.model.add_parameters((self.num_output, self.num_hidden))
         self.b_decoder = self.model.add_parameters((self.num_output))
 
