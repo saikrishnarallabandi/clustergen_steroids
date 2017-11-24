@@ -117,6 +117,7 @@ class EncoderDecoderModel(object):
        # Apply forward LSTM
        init_state_fwd = self.fwd_lstm_builder.initial_state()
        states = init_state_fwd.add_inputs(dy.inputTensor(input))
+       print dy.inputTensor(input).value()
        fwd_vectors = [state.output() for state in states]
 
        # Apply reverse LSTM
@@ -167,7 +168,10 @@ class EncoderDecoderModel(object):
          #    print "Attention output is: ", len(attended_encoding.value())
          if debug_time :       
            print "Adding to decoder"
-         state_decoder = state_decoder.add_input(dy.concatenate([attended_encoding,last_embeddings]))
+         print "Output from attention: ", attended_encoding.value()
+         print "Value of last embeddings: ", last_embeddings.value()
+         print dy.concatenate([attended_encoding,last_embeddings]).value()
+         state_decoder.add_input(dy.concatenate([attended_encoding,last_embeddings]))
          end = time.time()
          if debug_time :       
            print "Added to deocder, ", end - start
