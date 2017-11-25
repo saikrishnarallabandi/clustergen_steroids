@@ -8,21 +8,22 @@ from sklearn import preprocessing
 import pickle, logging
 import argparse
 
-debug = 0
+debug = 1
 
 class falcon_heavy(object):
     
    def __init__(self, model, args):
       self.pc = model.add_subcollection()
+      self.model = model
       self.args = args
       self.num_input = args.num_input
       self.num_output = args.num_output
       self.generic_layer_list = args.generic_layer_list
       self.postspecificlayers = args.postspecificlayers
-      self.speakers = args.speakers
       self.number_of_layers = 1 + len(self.generic_layer_list) + len(self.postspecificlayers) + 1
-      num_hidden_1 = self.generic_layers[0]
-      self.act = args.act
+      num_hidden_1 = self.generic_layer_list[0]
+      self.act_generic = args.act_generic
+      self.act_postspecific = args.act_postspecific
 
       # Add first layer
       if debug :
@@ -37,60 +38,69 @@ class falcon_heavy(object):
       self.biases_array.append(self.b1)
       for k in range(1, len(self.generic_layer_list)):
           if debug: 
-             print "At ", k , " adding weights ", self.generic_layer_list[k], self.generic_layer_list[k-1]
+             print "At ", k , " adding generic weights ", self.generic_layer_list[k], self.generic_layer_list[k-1]
           self.weight_matrix_array.append(self.model.add_parameters((self.generic_layer_list[k], self.generic_layer_list[k-1])))
           self.biases_array.append(self.model.add_parameters((self.generic_layer_list[k])))
 
       # Add specific layers
-      if debug :
-          self.specific_weights_array = []
-          self.specific_biases_array = []
-          print "Adding specific layers "
-          for (i, layer) in enumerate(self.postspecificlayers):
-            self.specific_weights_array.append(  self.model.add_parameters(( int(layer)    , self.generic_layer_list[-1] )) )     
-            self.specific_biases_array.append( self.model.add_parameters(( int(layer) )) )
+      self.specific_weights_array = []
+      self.specific_biases_array = []
+      print "Adding specific layers "
+      for (i, layer) in enumerate(self.postspecificlayers):
+          if debug:
+             print "At ", i , " adding specific weights ", self.postspecificlayers[i], self.postspecificlayers[i-1]
+          self.specific_weights_array.append(  self.model.add_parameters(( int(layer)    , self.postspecificlayers[-1] )) )     
+          self.specific_biases_array.append( self.model.add_parameters(( int(layer) )) )
 
       # Residual
-      self.specific_weights_array.append(  self.model.add_parameters(( num_output   , int(layer)+self.num_input  )) )
+      if debug:
+         print "Adding final layer ", self.num_output   , int(layer)+self.num_input  
+      self.specific_weights_array.append(  self.model.add_parameters(( self.num_output   , int(layer)+self.num_input  )) )
       self.biases_array.append(self.model.add_parameters((self.num_output)))
 
       # Spec
       self.spec = (args)
 
 
-      def calculate_loss(self,input,output,tgtspk):
+   def calculate_loss(self,input,output,tgtspk):
          # Initial layer
-         weight_matrix_array = [dy.parameter(W1)]
-         biases_array = [dy.parameter(b1)]
+         weight_matrix_array = [dy.parameter(self.W1)]
+         biases_array = [dy.parameter(self.b1)]
+         acts = []
          # Generic layers
-         for (W,b) in zip(self.weight_matrix_array, self.biases_array):
+         for (W,b,a) in zip(self.weight_matrix_array, self.biases_array, self.act_generic):
              weight_matrix_array.append(dy.parameter(W))
              biases_array.append(dy.parameter(b)) 
+             acts.append(a)
          # Specific layers
          start_index = tgtspk
          length = len(self.postspecificlayers) + 1
          idx = 0
-         for (W,b) in zip(self.specific_weights_array[start_index:start_index+length], self.specific_biases_array[start_index:start_index+length]):
+         for (W,b,a) in zip(self.specific_weights_array[start_index:start_index+length], self.specific_biases_array[start_index:start_index+length], self.act_postspecific):
              weight_matrix_array.append(dy.parameter(W))
              biases_array.append(dy.parameter(b))              
+             acts.append(a)
 
-         acts = self.act
          w = weight_matrix_array[0]
          b = biases_array[0]
          act = acts[0]
          intermediate = act(dy.affine_transform([b, w, input]))
+         if debug:
+             print "Dimensions of the intermediate: "
+             print len(intermediate.value())
          activations = [intermediate]
          count = 0
          for (W,b,g) in zip(weight_matrix_array[1:], biases_array[1:], acts[1:]):
             if count == self.number_of_layers:
                   pred = g(dy.affine_transform([b, W, activations[-1]+input  ]))
             else:     
+              
                   pred = g(dy.affine_transform([b, W, activations[-1]]))
             activations.append(pred)  
             losses = output - pred
          return dy.l2_norm(losses)
  
-      def predict(self,input,output,tgtspk):
+   def predict(self,input,output,tgtspk):
          # Initial layer
          weight_matrix_array = [dy.parameter(W1)]
          biases_array = [dy.parameter(b1)]
