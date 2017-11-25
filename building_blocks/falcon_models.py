@@ -8,7 +8,7 @@ from sklearn import preprocessing
 import pickle, logging
 import argparse
 
-debug = 1
+debug = 0
 
 class falcon_heavy(object):
     
@@ -24,6 +24,7 @@ class falcon_heavy(object):
       num_hidden_1 = self.generic_layer_list[0]
       self.act_generic = args.act_generic
       self.act_postspecific = args.act_postspecific
+      self.act_final = args.act_final
 
       # Add first layer
       if debug :
@@ -64,9 +65,12 @@ class falcon_heavy(object):
 
    def calculate_loss(self,input,output,tgtspk):
          # Initial layer
-         weight_matrix_array = [dy.parameter(self.W1)]
-         biases_array = [dy.parameter(self.b1)]
+         weight_matrix_array = []
+         biases_array = []
          acts = []
+         if debug:
+             print "The number of generic biases: ", len(self.biases_array)
+             print "The number of generic acts: ", len(self.act_generic)
          # Generic layers
          for (W,b,a) in zip(self.weight_matrix_array, self.biases_array, self.act_generic):
              weight_matrix_array.append(dy.parameter(W))
@@ -76,6 +80,9 @@ class falcon_heavy(object):
          length = len(self.postspecificlayers)
          start_index = (tgtspk -1)*length  
          idx = 0
+         if debug:
+             print "The number of specific biases: ", len(self.biases_array[start_index:start_index+length])
+             print "The number of specific acts: ", len(self.act_postspecific)
          for (W,b,a) in zip(self.specific_weights_array[start_index:start_index+length], self.specific_biases_array[start_index:start_index+length], self.act_postspecific):
              weight_matrix_array.append(dy.parameter(W))
              biases_array.append(dy.parameter(b))              
@@ -83,23 +90,28 @@ class falcon_heavy(object):
          # Final Layer
          weight_matrix_array.append(dy.parameter(self.W_final))
          biases_array.append(dy.parameter(self.b_final))
+         acts.append(self.act_final)
 
          w = weight_matrix_array[0]
          b = biases_array[0]
          act = acts[0]
          intermediate = act(dy.affine_transform([b, w, input]))
          if debug:
+             print "Here are the dimensions of the biases: ", [len(k.value()) for k in biases_array]
+             print "Here are the acts: ", [k for k in acts]
              print "Dimensions of the intermediate: "
              print len(intermediate.value())
          activations = [intermediate]
-         count = 0
+         count = 1
          for (W,b,g) in zip(weight_matrix_array[1:], biases_array[1:], acts[1:]):
             if debug:
-               print "Adding to the layer number: ", count+1
-            #if count == self.number_of_layers+1:
-            #      pred = g(dy.affine_transform([b, W, activations[-1]+input  ]))
-            #else:     
-            pred = g(dy.affine_transform([b, W, activations[-1]]))
+               print "Adding to the layer number: ", count
+               print "Total layers: ", self.number_of_layers
+            if count == self.number_of_layers-1:
+                  t = dy.concatenate([activations[-1],input])
+                  pred = g(dy.affine_transform([b, W, t  ]))
+            else:     
+                  pred = g(dy.affine_transform([b, W, activations[-1]]))
             activations.append(pred)  
             count += 1
          if debug:
@@ -108,30 +120,58 @@ class falcon_heavy(object):
          losses = output - pred
          return dy.l2_norm(losses)
  
-   def predict(self,input,output,tgtspk):
+   def predict(self,input, tgtspk):
          # Initial layer
-         weight_matrix_array = [dy.parameter(W1)]
-         biases_array = [dy.parameter(b1)]
+         weight_matrix_array = []
+         biases_array = []
+         acts = []
+         if debug:
+             print "The number of generic biases: ", len(self.biases_array)
+             print "The number of generic acts: ", len(self.act_generic)
          # Generic layers
-         for (W,b) in zip(self.weight_matrix_array, self.biases_array):
+         for (W,b,a) in zip(self.weight_matrix_array, self.biases_array, self.act_generic):
              weight_matrix_array.append(dy.parameter(W))
              biases_array.append(dy.parameter(b))
+             acts.append(a)
          # Specific layers
-         start_index = tgtspk
-         length = len(self.postspecificlayers) + 1
+         length = len(self.postspecificlayers)
+         start_index = (tgtspk -1)*length
          idx = 0
-         for (W,b) in zip(self.specific_weights_array[start_index:start_index+length], self.specific_biases_array[start_index:start_index+length]):
+         if debug:
+             print "The number of specific biases: ", len(self.biases_array[start_index:start_index+length])
+             print "The number of specific acts: ", len(self.act_postspecific)
+         for (W,b,a) in zip(self.specific_weights_array[start_index:start_index+length], self.specific_biases_array[start_index:start_index+length], self.act_postspecific):
              weight_matrix_array.append(dy.parameter(W))
              biases_array.append(dy.parameter(b))
+             acts.append(a)
+         # Final Layer
+         weight_matrix_array.append(dy.parameter(self.W_final))
+         biases_array.append(dy.parameter(self.b_final))
+         acts.append(self.act_final)
 
-         acts = self.act
          w = weight_matrix_array[0]
          b = biases_array[0]
          act = acts[0]
          intermediate = act(dy.affine_transform([b, w, input]))
+         if debug:
+             print "Here are the dimensions of the biases: ", [len(k.value()) for k in biases_array]
+             print "Here are the acts: ", [k for k in acts]
+             print "Dimensions of the intermediate: "
+             print len(intermediate.value())
          activations = [intermediate]
+         count = 1
          for (W,b,g) in zip(weight_matrix_array[1:], biases_array[1:], acts[1:]):
-            pred = g(dy.affine_transform([b, W, activations[-1]]))
+            if debug:
+               print "Adding to the layer number: ", count
+               print "Total layers: ", self.number_of_layers
+            if count == self.number_of_layers-1:
+                  t = dy.concatenate([activations[-1],input])
+                  pred = g(dy.affine_transform([b, W, t  ]))
+            else:
+                  pred = g(dy.affine_transform([b, W, activations[-1]]))
             activations.append(pred)
-         return pred
-                  
+            count += 1
+         if debug:
+            print "Activation dimensions are : ", [len(k.value()) for k in activations]
+            print "Output dimensions are: ", len(output.value())
+         return activations[-1]                  
