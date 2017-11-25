@@ -20,14 +20,14 @@ class falcon_heavy(object):
       self.num_output = args.num_output
       self.generic_layer_list = args.generic_layer_list
       self.postspecificlayers = args.postspecificlayers
-      self.number_of_layers = 1 + len(self.generic_layer_list) + len(self.postspecificlayers) + 1
+      self.number_of_layers =  len(self.generic_layer_list) + len(self.postspecificlayers) + 1
       num_hidden_1 = self.generic_layer_list[0]
       self.act_generic = args.act_generic
       self.act_postspecific = args.act_postspecific
 
       # Add first layer
       if debug :
-           print "Adding input to first hidden layer weights ", num_hidden_1, self.num_input
+           print "Adding input to the network ", num_hidden_1, self.num_input
       self.W1 = self.pc.add_parameters((num_hidden_1, self.num_input))
       self.b1 = self.pc.add_parameters((num_hidden_1))
 
@@ -55,8 +55,8 @@ class falcon_heavy(object):
       # Residual
       if debug:
          print "Adding final layer ", self.num_output   , int(layer)+self.num_input  
-      self.specific_weights_array.append(  self.model.add_parameters(( self.num_output   , int(layer)+self.num_input  )) )
-      self.biases_array.append(self.model.add_parameters((self.num_output)))
+      self.W_final =  self.model.add_parameters(( self.num_output   , int(layer)+self.num_input  )) 
+      self.b_final = self.model.add_parameters((self.num_output))
 
       # Spec
       self.spec = (args)
@@ -73,13 +73,16 @@ class falcon_heavy(object):
              biases_array.append(dy.parameter(b)) 
              acts.append(a)
          # Specific layers
-         start_index = tgtspk
-         length = len(self.postspecificlayers) + 1
+         length = len(self.postspecificlayers)
+         start_index = (tgtspk -1)*length  
          idx = 0
          for (W,b,a) in zip(self.specific_weights_array[start_index:start_index+length], self.specific_biases_array[start_index:start_index+length], self.act_postspecific):
              weight_matrix_array.append(dy.parameter(W))
              biases_array.append(dy.parameter(b))              
              acts.append(a)
+         # Final Layer
+         weight_matrix_array.append(dy.parameter(self.W_final))
+         biases_array.append(dy.parameter(self.b_final))
 
          w = weight_matrix_array[0]
          b = biases_array[0]
@@ -91,13 +94,18 @@ class falcon_heavy(object):
          activations = [intermediate]
          count = 0
          for (W,b,g) in zip(weight_matrix_array[1:], biases_array[1:], acts[1:]):
-            if count == self.number_of_layers:
-                  pred = g(dy.affine_transform([b, W, activations[-1]+input  ]))
-            else:     
-              
-                  pred = g(dy.affine_transform([b, W, activations[-1]]))
+            if debug:
+               print "Adding to the layer number: ", count+1
+            #if count == self.number_of_layers+1:
+            #      pred = g(dy.affine_transform([b, W, activations[-1]+input  ]))
+            #else:     
+            pred = g(dy.affine_transform([b, W, activations[-1]]))
             activations.append(pred)  
-            losses = output - pred
+            count += 1
+         if debug:
+            print "Activation dimensions are : ", [len(k.value()) for k in activations]
+            print "Output dimensions are: ", len(output.value())
+         losses = output - pred
          return dy.l2_norm(losses)
  
    def predict(self,input,output,tgtspk):
