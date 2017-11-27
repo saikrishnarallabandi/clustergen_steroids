@@ -1,5 +1,6 @@
 import dynet_config
 dynet_config.set_gpu()
+dynet_config.set(mem=8000) 
 import dynet as dy
 import os
 import pickle
@@ -109,7 +110,8 @@ class falcon_heavy(object):
             if debug:
                print "Adding to the layer number: ", count
                print "Total layers: ", self.number_of_layers
-            if count == self.number_of_layers-1:
+               print "Activations till now: ", [len(k.value()) for k in activations]
+            if count == self.number_of_layers -1:
                   t = dy.concatenate([activations[-1],input])
                   pred = g(dy.affine_transform([b, W, t  ]))
             else:     
