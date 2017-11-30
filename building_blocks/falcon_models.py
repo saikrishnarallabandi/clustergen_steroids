@@ -1,6 +1,10 @@
+print "In building block"
+import _dynet
 import dynet_config
 dynet_config.set_gpu()
-dynet_config.set(mem=8000) 
+dynet_config.set(mem=8000, requested_gpus=1, autobatch=1)
+
+import dynet as dy
 import dynet as dy
 import os
 import pickle
@@ -50,7 +54,7 @@ class falcon_heavy(object):
       self.specific_weights_array = []
       self.specific_biases_array = []
       print "Adding specific layers "
-      for (i, layer) in enumerate(self.postspecificlayers):
+      for (i, layer) in enumerate(self.postspecificlayers*4):    # multiplying 4 coz there are 4 speakers 29 Nov 2017
           if debug:
              print "At ", i , " adding specific weights ", self.postspecificlayers[i], self.postspecificlayers[i-1]
           self.specific_weights_array.append(  self.model.add_parameters(( int(layer)    , self.postspecificlayers[-1] )) )     
@@ -67,6 +71,10 @@ class falcon_heavy(object):
 
 
    def calculate_loss(self,input,output,tgtspk):
+         #if tgtspk == 2:
+         #  debug = 1
+         #else:
+         #  debug = 0
          # Initial layer
          weight_matrix_array = []
          biases_array = []
@@ -81,7 +89,7 @@ class falcon_heavy(object):
              acts.append(a)
          # Specific layers
          length = len(self.postspecificlayers)
-         start_index = (tgtspk -1)*length  
+         start_index = int(tgtspk-1)*length  
          idx = 0
          if debug:
              print "The number of specific biases: ", len(self.biases_array[start_index:start_index+length])
@@ -116,6 +124,8 @@ class falcon_heavy(object):
                   pred = g(dy.affine_transform([b, W, t  ]))
             else:     
                   pred = g(dy.affine_transform([b, W, activations[-1]]))
+            # Adding dropout 28 Nov 2017
+            dy.dropout(pred, 0.5)
             activations.append(pred)  
             count += 1
          if debug:
@@ -141,10 +151,14 @@ class falcon_heavy(object):
          length = len(self.postspecificlayers)
          start_index = (tgtspk -1)*length
          idx = 0
+         c = 0
          if debug:
              print "The number of specific biases: ", len(self.biases_array[start_index:start_index+length])
              print "The number of specific acts: ", len(self.act_postspecific)
          for (W,b,a) in zip(self.specific_weights_array[start_index:start_index+length], self.specific_biases_array[start_index:start_index+length], self.act_postspecific):
+             if debug:
+               print "Added layer: ", c+1
+             c += 1
              weight_matrix_array.append(dy.parameter(W))
              biases_array.append(dy.parameter(b))
              acts.append(a)
