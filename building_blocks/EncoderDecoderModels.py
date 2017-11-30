@@ -1,6 +1,6 @@
 import _dynet
 import dynet_config
-dynet_config.set(mem=8000, requested_gpus=0, autobatch=1)
+dynet_config.set(mem=512, requested_gpus=0, autobatch=1)
 import dynet as dy
 import os, sys
 import pickle
@@ -315,19 +315,21 @@ class EncoderDecoderModel(object):
        if debug:
            print "First input to decoder: ", len(dy.concatenate([dy.vecInput(self.num_hidden*2),self.M[0]]).value())
        state_decoder = self.decoder_lstm_builder.initial_state().add_input(dy.concatenate([dy.vecInput(self.num_hidden*2), self.M[0]]))
-
        last_embeddings = self.M[0]
        if debug:
             print "Length of last embeddings: ", len(last_embeddings.value())
        output_frames = []
+       w1 = dy.parameter(self.attention_w1)
+       w1dt = w1 * bidirectional_vectors
        while True:
-         #attended_encoding = self.attend(bidirectional_vectors,state_decoder)
+         attended_encoding = self.attend(w1dt, bidirectional_vectors, state_decoder)
+         attention = [k[0].value() for k in attended_encoding]
          #if debug:
          #    print "Attention output is: ", len(attended_encoding.value())
-         #state_decoder = state_decoder.add_input(dy.concatenate([attended_encoding,last_embeddings]))
-         state_decoder = state_decoder.add_input(dy.concatenate([dy.vecInput(self.num_hidden*2),last_embeddings]))
+         state_decoder = state_decoder.add_input(dy.concatenate([dy.inputTensor(attention),last_embeddings]))
          ### Predict the frames now
          frame_predicted = w_out * state_decoder.output() + b_out
+         frame_predicted = dy.rectify(w_out * state_decoder.output() + b_out)
          last_embeddings = frame_predicted
          if debug:
              print "Length of updated last embeddings is : ", len(last_embeddings.value())
