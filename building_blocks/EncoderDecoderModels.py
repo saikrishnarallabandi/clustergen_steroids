@@ -1,10 +1,8 @@
+import _dynet
 import dynet_config
-dynet_config.set_gpu()
+dynet_config.set(mem=8000, requested_gpus=0, autobatch=1)
 import dynet as dy
-dyparams = dy.DynetParams()
-dyparams.set_mem(8000)
-dyparams.set_autobatch(True)
-import os
+import os, sys
 import pickle
 import numpy as np
 import time
@@ -83,22 +81,28 @@ class EncoderDecoderModel(object):
             print "In attention"
         w2 = dy.parameter(self.attention_w2)
         v = dy.parameter(self.attention_v)
-        attention_weights = []
-
         if debug:
-            print "State output: ", list(state.h())
+           print "Shape of w2: ", np.asarray(w2.value()).shape
+           print "Shape of state : " , np.asarray(dy.concatenate(list(state.s())).value()).shape
         end = time.time()
         start = end
         w2dt = w2 * dy.concatenate(list(state.s()))
         end = time.time()
         if debug:
-            print "W2dt output: ", len(w2dt.value())
-        for input_vector in vectors:
-            unnormalized = dy.transpose(v * dy.tanh(dy.colwise_add(w1dt, w2dt)))
-            end = time.time()
-            att_weights = dy.softmax(unnormalized)
-            end = time.time()
-        return vectors * att_weights
+            print " Shape of W2dt: ", np.asarray(w2dt.value()).shape
+        unnormalized = dy.transpose(v * dy.tanh(dy.colwise_add(w1dt, w2dt)))
+        if debug:
+           print "Shape of unnormalized: ", np.asarray(unnormalized.value()).shape
+        end = time.time()
+        att_weights = dy.softmax(unnormalized)
+        if debug:
+            print "Shape of Attention weights: ", np.asarray(att_weights.value()).shape
+        end = time.time()
+        context = vectors * att_weights
+        if debug:
+           print "Shape of context: ", np.asarray(context.value()).shape
+           #print "Context: " , np.asarray(context.value())
+        return context
 
     def calculate_loss_minibatch(self, input_batch, output_batch):
        # This is a naive batching
@@ -112,13 +116,16 @@ class EncoderDecoderModel(object):
 
     def calculate_loss(self, input, output):
        start = time.time()
-       if debug_time :
+       if debug:
            print "Applying Encoder"
+
        # Apply forward LSTM
        init_state_fwd = self.fwd_lstm_builder.initial_state()
        states = init_state_fwd.add_inputs(dy.inputTensor(input))
-       print dy.inputTensor(input).value()
+       #if debug:
+       #    print " Input to the encoder: ", dy.inputTensor(input).value()
        fwd_vectors = [state.output() for state in states]
+       
 
        # Apply reverse LSTM
        init_state_bwd = self.bwd_lstm_builder.initial_state()
@@ -128,19 +135,22 @@ class EncoderDecoderModel(object):
        bwd_vectors = bwd_vectors[::-1]
        end = time.time()
        if debug_time :       
-           print "Applied encoder, ", end - start
+           print "Time to apply encoder: ", end - start
        start = end
 
        # Concatenate the vectors
        lstm_vectors =  [dy.concatenate([fwd_out, bwd_out]) for fwd_out, bwd_out in zip(fwd_vectors, bwd_vectors)]
        if debug:
            print "The number of bidirectional vectors: ", len(lstm_vectors), " which means I think this is the length of the source sentence"
+           print "First vector: ", lstm_vectors[0].value()
        bidirectional_vectors = dy.concatenate_cols(lstm_vectors)
        if debug:
-           print "The number of bidirectional vectors: ", len(bidirectional_vectors.value()), " which means I think this is the length of the source sentence"
+           print "The number of column concatenated vectors: ", len(bidirectional_vectors.value())
+           print "Dimensions of each column: ", [len(k.value()) for k in bidirectional_vectors]
+           print "First vector: ", bidirectional_vectors[0].value()
        end = time.time()
        if debug_time :       
-           print "COncatenated the vectors, ", end - start  
+           print "Concatenated the vectors, ", end - start  
   
        # Decoder
        w_out = dy.parameter(self.w_decoder)
@@ -155,23 +165,26 @@ class EncoderDecoderModel(object):
        loss = []
        w1 = dy.parameter(self.attention_w1)
        w1dt = w1 * bidirectional_vectors
+       if debug:
+          print "Shape of w1dt: ", np.asarray(w1dt.value()).shape
        for output_frame in output:
          start = time.time()
          if debug_time :       
            print "Going to attention"
          attended_encoding = self.attend(w1dt, bidirectional_vectors, state_decoder)
+         attention = [k[0].value() for k in attended_encoding]
          end = time.time()
          if debug_time :       
            print "Returned from attention ", end - start
          start = end
          #if debug:
          #    print "Attention output is: ", len(attended_encoding.value())
-         if debug_time :       
+         if debug :       
            print "Adding to decoder"
-         print "Output from attention: ", attended_encoding.value()
-         print "Value of last embeddings: ", last_embeddings.value()
-         print dy.concatenate([attended_encoding,last_embeddings]).value()
-         state_decoder.add_input(dy.concatenate([attended_encoding,last_embeddings]))
+           print "Shape of output from attention: ", np.asarray(attended_encoding.value()).shape
+           print "Shape of output from attention: ", attention
+           print "Shape of last embeddings: ", np.asarray(last_embeddings.value()).shape
+         state_decoder.add_input(dy.concatenate([dy.inputTensor(attention),last_embeddings]))
          end = time.time()
          if debug_time :       
            print "Added to deocder, ", end - start
