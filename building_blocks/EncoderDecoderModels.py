@@ -37,7 +37,7 @@ class EncoderDecoderModel(object):
 
         # Attention MLP parameters
         self.attention_w1 = self.model.add_parameters((self.num_attention, self.num_hidden*2))
-        self.attention_w2 = self.model.add_parameters((self.num_attention, self.num_hidden))
+        self.attention_w2 = self.model.add_parameters((self.num_attention, self.num_hidden*2*self.num_layers))
         self.attention_v = self.model.add_parameters((1, self.num_attention))
 
     def set_M(self, n):
@@ -87,8 +87,8 @@ class EncoderDecoderModel(object):
             print "State output: ", list(state.h())
         end = time.time()
         start = end
-        #w2dt = w2 * dy.concatenate(list(state.s()))
-        w2dt = w2 * state.output()
+        w2dt = w2 * dy.concatenate(list(state.s()))
+        #w2dt = w2 * state.output()
         end = time.time()
         if debug:
             print "W2dt output: ", len(w2dt.value())
