@@ -1,16 +1,14 @@
+import _dynet
 import dynet_config
-dynet_config.set_gpu()
+dynet_config.set(mem=9000, requested_gpus=1, autobatch=1)
 import dynet as dy
-dyparams = dy.DynetParams()
-dyparams.set_mem(8000)
-dyparams.set_autobatch(True)
 import os
 import pickle
 import numpy as np
 import time
 
 debug = 0
-debug_time = 0
+debug_time = 1
 
 class EncoderDecoderModel(object):
 
@@ -112,12 +110,12 @@ class EncoderDecoderModel(object):
 
     def calculate_loss(self, input, output):
        start = time.time()
+       start_time = start
        if debug_time :
            print "Applying Encoder"
        # Apply forward LSTM
        init_state_fwd = self.fwd_lstm_builder.initial_state()
        states = init_state_fwd.add_inputs(dy.inputTensor(input))
-       print dy.inputTensor(input).value()
        fwd_vectors = [state.output() for state in states]
 
        # Apply reverse LSTM
@@ -128,7 +126,7 @@ class EncoderDecoderModel(object):
        bwd_vectors = bwd_vectors[::-1]
        end = time.time()
        if debug_time :       
-           print "Applied encoder, ", end - start
+           print "Applied encoder, ", end - start, end - start_time
        start = end
 
        # Concatenate the vectors
@@ -139,8 +137,8 @@ class EncoderDecoderModel(object):
        if debug:
            print "The number of bidirectional vectors: ", len(bidirectional_vectors.value()), " which means I think this is the length of the source sentence"
        end = time.time()
-       if debug_time :       
-           print "COncatenated the vectors, ", end - start  
+       #if debug_time :       
+       #    print "Concatenated the vectors, ", end - start  
   
        # Decoder
        w_out = dy.parameter(self.w_decoder)
@@ -155,26 +153,25 @@ class EncoderDecoderModel(object):
        loss = []
        w1 = dy.parameter(self.attention_w1)
        w1dt = w1 * bidirectional_vectors
-       for output_frame in output:
+       for (idx, output_frame) in enumerate(output):
          start = time.time()
          if debug_time :       
            print "Going to attention"
          attended_encoding = self.attend(w1dt, bidirectional_vectors, state_decoder)
+         attention = [k[0].value() for k in attended_encoding]
          end = time.time()
          if debug_time :       
-           print "Returned from attention ", end - start
+           print "Returned from attention ", end - start, end - start_time, idx 
          start = end
          #if debug:
          #    print "Attention output is: ", len(attended_encoding.value())
          if debug_time :       
            print "Adding to decoder"
-         print "Output from attention: ", attended_encoding.value()
-         print "Value of last embeddings: ", last_embeddings.value()
-         print dy.concatenate([attended_encoding,last_embeddings]).value()
-         state_decoder.add_input(dy.concatenate([attended_encoding,last_embeddings]))
+         state_decoder.add_input(dy.concatenate([dy.inputTensor(attention),last_embeddings]))
          end = time.time()
          if debug_time :       
-           print "Added to deocder, ", end - start
+           print "Added to deocder, ", end - start, end - start_time , idx
+           print '\n\n'
          start = end
          #state_decoder = state_decoder.add_input(dy.concatenate([dy.vecInput(self.num_hidden*2),last_embeddings]))
          ### Predict the frames now
@@ -182,8 +179,6 @@ class EncoderDecoderModel(object):
          frame_predicted = w_out * state_decoder.output() + b_out
          frame_predicted = dy.rectify(w_out * state_decoder.output() + b_out)
          last_embeddings = frame_predicted
-         if debug_time :       
-           print "Obtained last embeddings, ", end - start
          if debug:
              print "Length of updated last embeddings is : ", len(last_embeddings.value())
              print '\n'
@@ -255,7 +250,7 @@ class EncoderDecoderModel(object):
          #    print "Attention output is: ", len(attended_encoding.value())
          if debug_time :
            print "Adding to decoder"
-         state_decoder = state_decoder.add_input(dy.concatenate([attended_encoding,last_embeddings]))
+         state_decoder = state_decoder.add_input(dy.concatenate([dy.inputTensor(attended_encoding),last_embeddings]))
          end = time.time()
          if debug_time :
            print "Added to deocder, ", end - start
@@ -308,13 +303,11 @@ class EncoderDecoderModel(object):
             print "Length of last embeddings: ", len(last_embeddings.value())
        output_frames = []
        while True:
-         #attended_encoding = self.attend(bidirectional_vectors,state_decoder)
-         #if debug:
-         #    print "Attention output is: ", len(attended_encoding.value())
-         #state_decoder = state_decoder.add_input(dy.concatenate([attended_encoding,last_embeddings]))
-         state_decoder = state_decoder.add_input(dy.concatenate([dy.vecInput(self.num_hidden*2),last_embeddings]))
+         attended_encoding = self.attend(bidirectional_vectors,state_decoder)
+         attention = [k[0].value() for k in attended_encoding]
+         state_decoder = state_decoder.add_input(dy.concatenate([dy.inputTensor(attention),last_embeddings]))
          ### Predict the frames now
-         frame_predicted = w_out * state_decoder.output() + b_out
+         frame_predicted = dy.rectify(w_out * state_decoder.output() + b_out)
          last_embeddings = frame_predicted
          if debug:
              print "Length of updated last embeddings is : ", len(last_embeddings.value())
