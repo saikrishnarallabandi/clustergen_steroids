@@ -166,7 +166,6 @@ class EncoderDecoderModel(object):
 
          frame_loss = self.decoder_postfilter_dnn.calculate_loss(dy.inputTensor(attention), output_frame)
          loss.append(frame_loss)         
- 
        return dy.esum(loss)        
 
 
@@ -225,8 +224,8 @@ class EncoderDecoderModel(object):
          start = end
 
          frame_pred = self.decoder_postfilter_dnn.predict(dy.inputTensor(attention))
-         pred_frames.append(frame_pred)
-       return pred_frames.value()
+         pred_frames.append(frame_pred.value())
+       return pred_frames
   
 
         
