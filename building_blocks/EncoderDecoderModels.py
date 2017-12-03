@@ -144,8 +144,6 @@ class EncoderDecoderModel(object):
        # Decoder
        w_out = dy.parameter(self.w_decoder)
        b_out = dy.parameter(self.b_decoder)
-       if debug:
-           print "First input to decoder: ", len(dy.concatenate([dy.vecInput(self.num_hidden*2),self.M[0]]).value())
        state_decoder = self.decoder_lstm_builder.initial_state().add_input(dy.concatenate([dy.vecInput(self.num_hidden*2), self.M[0]]))
        last_embeddings = self.M[0]
        if debug:
@@ -315,7 +313,7 @@ class EncoderDecoderModel(object):
              print "Length of updated last embeddings is : ", len(last_embeddings.value())
              print '\n'
          output_frames.append(frame_predicted.value())
-         if last_embeddings == self.M[0] or len(output_frames) > 2* len(input):
+         if last_embeddings == np.empty([1,56]) or len(output_frames) > 0.2* len(input):
               break
        return output_frames
 
