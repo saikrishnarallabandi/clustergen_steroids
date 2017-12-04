@@ -1,6 +1,6 @@
 import _dynet
 import dynet_config
-dynet_config.set(mem=9000, requested_gpus=1, autobatch=1)
+dynet_config.set(mem=11000, requested_gpus=1, autobatch=1)
 import dynet as dy
 import os
 import pickle
@@ -19,6 +19,7 @@ class EncoderDecoderModel(object):
         self.num_layers = args[0]
         self.num_input = args[1]
         self.num_hidden = args[2]
+        self.num_hidden_lstm = self.num_hidden/32
         self.num_attention = args[3]
         self.num_output = args[4]
         self.act = args[5]
@@ -30,19 +31,20 @@ class EncoderDecoderModel(object):
         self.spec = (self.num_layers,self.num_input, self.num_hidden, self.num_attention, self.num_output, self.act)
 
         # Add the LSTMs
-        self.fwd_lstm_builder = dy.CompactVanillaLSTMBuilder(self.num_layers, self.num_input, self.num_hidden, model) 
-        self.bwd_lstm_builder = dy.CompactVanillaLSTMBuilder(self.num_layers, self.num_input, self.num_hidden, model)
-        self.w_decoder = self.model.add_parameters((self.num_output, self.num_hidden))
+        self.fwd_lstm_builder = dy.CompactVanillaLSTMBuilder(self.num_layers, self.num_input, self.num_hidden_lstm, model) 
+        self.bwd_lstm_builder = dy.CompactVanillaLSTMBuilder(self.num_layers, self.num_input, self.num_hidden_lstm, model)
+        self.w_decoder = self.model.add_parameters((self.num_output, self.num_hidden_lstm))
         self.b_decoder = self.model.add_parameters((self.num_output))
 
         # Attention MLP parameters
-        self.attention_w1 = self.model.add_parameters((self.num_attention, self.num_hidden*2))
-        self.attention_w2 = self.model.add_parameters((self.num_attention, self.num_hidden*self.num_layers))
+        self.attention_w1 = self.model.add_parameters((self.num_attention, self.num_hidden_lstm*2))
+        self.attention_w2 = self.model.add_parameters((self.num_attention, self.num_hidden_lstm*self.num_layers))
         self.attention_v = self.model.add_parameters((1, self.num_attention))
 
         # Add the Decoder DNN
-        self.decoder_dnn = FeedForwardNeuralNet(self.model, [self.num_input*11, [self.num_hidden], self.num_output, [dy.tanh, dy.tanh, dy.tanh, dy.tanh, dy.tanh, dy.tanh]])
-        self.decoder_postfilter_dnn = FeedForwardNeuralNet(self.model, [self.num_hidden*2, [self.num_hidden], self.num_output, [dy.tanh, dy.tanh, dy.tanh, dy.tanh, dy.tanh, dy.tanh]])
+        self.decoder_dnn = FeedForwardNeuralNet(self.model, [self.num_input*11, [self.num_hidden_lstm, self.num_hidden, self.num_hidden_lstm], self.num_output, [dy.selu, dy.selu, dy.selu, dy.selu, dy.selu, dy.selu]])
+        self.decoder_postfilter_dnn = FeedForwardNeuralNet(self.model, [self.num_input*11 + self.num_hidden_lstm*2, [self.num_hidden, self.num_hidden, self.num_hidden, self.num_hidden, self.num_hidden ], self.num_output, [dy.selu, dy.selu, dy.selu, dy.selu, dy.selu, dy.selu]])
+        self.decoder_postfilter_dnn = FeedForwardNeuralNet(self.model, [self.num_input*11, [self.num_hidden, self.num_hidden, self.num_hidden, self.num_hidden, self.num_hidden ], self.num_output, [dy.selu, dy.selu, dy.selu, dy.selu, dy.selu, dy.selu]])   
 
     def set_M(self, n):
         print n
@@ -115,7 +117,7 @@ class EncoderDecoderModel(object):
     def calculate_loss(self, input, output, input_context, output_context):
        start = time.time()
        start_time = start
-       first_encode = 1
+       first_encode = 0
        if first_encode:
 
          # Apply forward LSTM
@@ -141,13 +143,13 @@ class EncoderDecoderModel(object):
        for idx, (input_frame_context, output_frame) in enumerate(zip(input_context, output_context)):
          dy.renew_cg()
 
-         bidirectional_vectors_value_tensor  = dy.inputTensor(bidirectional_vectors_value)
+         #bidirectional_vectors_value_tensor  = dy.inputTensor(bidirectional_vectors_value)
 
          # Decoder
          output_frame = dy.inputTensor(output_frame)
          input_frame_context = dy.inputTensor(input_frame_context)
          w1 = dy.parameter(self.attention_w1)
-         w1dt = w1 * bidirectional_vectors_value_tensor
+         #w1dt = w1 * bidirectional_vectors_value_tensor
          loss = []
 
          w_out = dy.parameter(self.w_decoder)
@@ -157,14 +159,16 @@ class EncoderDecoderModel(object):
          start = time.time()
          if debug_time :       
            print "Going to attention"
-         attended_encoding = self.attend(w1dt, bidirectional_vectors_value_tensor, state_decoder)
-         attention = [k[0].value() for k in attended_encoding]
+         #attended_encoding = self.attend(w1dt, bidirectional_vectors_value_tensor, state_decoder)
+         #attention = [k[0].value() for k in attended_encoding]
+         #postfilter_input = dy.concatenate([input_frame_context, dy.inputTensor(attention)])
+         postfilter_input = input_frame_context
          end = time.time()
          if debug_time :       
            print "Returned from attention ", end - start, end - start_time, idx 
          start = end
 
-         frame_loss = self.decoder_postfilter_dnn.calculate_loss(dy.inputTensor(attention), output_frame)
+         frame_loss = self.decoder_postfilter_dnn.calculate_loss(postfilter_input, output_frame)
          loss.append(frame_loss)         
        return dy.esum(loss)        
 
@@ -175,7 +179,7 @@ class EncoderDecoderModel(object):
 
        start = time.time()
        start_time = start
-       first_encode = 1
+       first_encode = 0
        if first_encode:
 
          # Apply forward LSTM
@@ -201,12 +205,12 @@ class EncoderDecoderModel(object):
        for idx, input_frame_context in enumerate(input_context):
 
          dy.renew_cg()
-         bidirectional_vectors_value_tensor  = dy.inputTensor(bidirectional_vectors_value)
+         #bidirectional_vectors_value_tensor  = dy.inputTensor(bidirectional_vectors_value)
 
          # Decoder
          input_frame_context = dy.inputTensor(input_frame_context)
          w1 = dy.parameter(self.attention_w1)
-         w1dt = w1 * bidirectional_vectors_value_tensor
+         #w1dt = w1 * bidirectional_vectors_value_tensor
          loss = []
 
          w_out = dy.parameter(self.w_decoder)
@@ -216,14 +220,16 @@ class EncoderDecoderModel(object):
          start = time.time()
          if debug_time :
            print "Going to attention"
-         attended_encoding = self.attend(w1dt, bidirectional_vectors_value_tensor, state_decoder)
-         attention = [k[0].value() for k in attended_encoding]
+         #attended_encoding = self.attend(w1dt, bidirectional_vectors_value_tensor, state_decoder)
+         #attention = [k[0].value() for k in attended_encoding]
+         #postfilter_input = dy.concatenate([input_frame_context, dy.inputTensor(attention)])
+         postfilter_input = input_frame_context
          end = time.time()
          if debug_time :
            print "Returned from attention ", end - start, end - start_time, idx
          start = end
 
-         frame_pred = self.decoder_postfilter_dnn.predict(dy.inputTensor(attention))
+         frame_pred = self.decoder_postfilter_dnn.predict(postfilter_input)
          pred_frames.append(frame_pred.value())
        return pred_frames
   

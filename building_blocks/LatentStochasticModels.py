@@ -1,3 +1,6 @@
+#import _dynet
+import dynet_config
+dynet_config.set(mem=8000,  autobatch=1)
 import dynet as dy
 import os
 import pickle
@@ -84,7 +87,7 @@ class VariationalAutoEncoder(object):
     print "Loaded params"
   
    # MLP parameters
-    num_hidden_q = 3
+    num_hidden_q = num_output
     self.W_mean_p = model.add_parameters((num_hidden_q, num_input))
     self.V_mean_p = model.add_parameters((num_hidden, num_hidden_q))
     self.b_mean_p = model.add_parameters((num_hidden_q))
@@ -110,9 +113,6 @@ class VariationalAutoEncoder(object):
   
   def calc_loss_scaling(self, input_frame , output_frame):
 
-    # Renew the computation graph
-    dy.renew_cg()
-
     # Instantiate the params
     W_mean = dy.parameter(self.W_mean_p)
     V_mean = dy.parameter(self.V_mean_p)
@@ -120,8 +120,6 @@ class VariationalAutoEncoder(object):
     W_var = dy.parameter(self.W_var_p)
     V_var = dy.parameter(self.V_var_p)
     b_var = dy.parameter(self.b_var_p)
-    input_frame = dy.inputTensor(input_frame)
-    output_frame = dy.inputTensor(output_frame)
 
     # Get the mean and diagonal log covariance from the encoder
     mu = self.mlp(input_frame , W_mean, V_mean, b_mean)
@@ -147,7 +145,7 @@ class VariationalAutoEncoder(object):
   def calc_loss_basic(self, input_frame , output_frame):
 
     # Renew the computation graph
-    dy.renew_cg()
+    #dy.renew_cg()
 
     # Instantiate the params
     W_mean = dy.parameter(self.W_mean_p)
@@ -156,8 +154,6 @@ class VariationalAutoEncoder(object):
     W_var = dy.parameter(self.W_var_p)
     V_var = dy.parameter(self.V_var_p)
     b_var = dy.parameter(self.b_var_p)    
-    input_frame = dy.inputTensor(input_frame)
-    output_frame = dy.inputTensor(output_frame)
 
     # Get the mean and diagonal log covariance from the encoder
     mu = self.mlp(input_frame , W_mean, V_mean, b_mean)
@@ -190,7 +186,6 @@ class VariationalAutoEncoder(object):
     W_var = dy.parameter(self.W_var_p)
     V_var = dy.parameter(self.V_var_p)
     b_var = dy.parameter(self.b_var_p)
-    input_frame = dy.inputTensor(input_frame)
 
     # Get the mean and diagonal log covariance from the encoder
     mu = self.mlp(input_frame , W_mean, V_mean, b_mean)
