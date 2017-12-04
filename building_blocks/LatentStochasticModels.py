@@ -1,6 +1,6 @@
 #import _dynet
 import dynet_config
-dynet_config.set(mem=8000,  autobatch=1)
+dynet_config.set(mem=6000, requested_gpus=0, autobatch=1)
 import dynet as dy
 import os
 import pickle
@@ -1693,3 +1693,135 @@ class VariationalEncoderDecoder(object):
        z = self.reparameterize(mu, log_var)
 
        return dec_dnn.predict(z)
+
+
+
+
+class VariationalAutoEncoder_DNN(object):
+
+  def __init__(self, model, num_input, num_hidden, num_output, act=dy.tanh):
+    self.num_input = int(num_input)
+    self.num_hidden = int(num_hidden)
+    self.num_out = int(num_output)
+    self.model = model
+    print "Loaded params"
+  
+   # MLP parameters
+    num_hidden_q = num_output
+    self.W_mean_p = model.add_parameters((num_hidden_q, num_input))
+    self.V_mean_p = model.add_parameters((num_hidden, num_hidden_q))
+    self.b_mean_p = model.add_parameters((num_hidden_q))
+    print "Loaded params for means"
+   
+    self.W_var_p = model.add_parameters((num_hidden_q, num_input))
+    self.V_var_p = model.add_parameters((num_hidden, num_hidden_q))
+    self.b_var_p = model.add_parameters((num_hidden_q))
+    print "Loaded params for variances"
+
+    self.W_out_p = model.add_parameters((num_output, num_hidden))
+    self.b_out_p = model.add_parameters((num_output)) 
+    print "Loaded params for output"
+
+    self.encoder_dnn = FeedForwardNeuralNet(self.model, [num_input, [num_hidden, num_output], num_output, [dy.selu, dy.selu, dy.selu, dy.selu, dy.selu, dy.selu]])
+    self.decoder_dnn = FeedForwardNeuralNet(self.model, [num_output, [num_hidden,  num_hidden], num_output, [dy.selu, dy.selu, dy.selu, dy.selu, dy.selu, dy.selu]])
+
+  def reparameterize(self, mu, logvar):
+    d = mu.dim()[0][0]
+    eps = dy.random_normal(d)
+    std = dy.exp(logvar * 0.5)
+    return mu + dy.cmult(std, eps)
+
+  def mlp(self, x, W, V, b):
+    return V * dy.tanh(W * x + b)
+  
+  def calc_loss_basic(self, input_frame , output_frame):
+
+    # Renew the computation graph
+    #dy.renew_cg()
+
+    # Instantiate the params
+    W_mean = dy.parameter(self.W_mean_p)
+    V_mean = dy.parameter(self.V_mean_p)
+    b_mean = dy.parameter(self.b_mean_p)
+    W_var = dy.parameter(self.W_var_p)
+    V_var = dy.parameter(self.V_var_p)
+    b_var = dy.parameter(self.b_var_p)    
+
+    # Get the mean and diagonal log covariance from the encoder
+    mu = self.encoder_dnn.get_last_activation(input_frame)
+    log_var = self.encoder_dnn.get_last_activation(input_frame)
+
+    # Compute the KL Divergence loss
+    kl_loss = -0.5 * dy.sum_elems(1 + log_var - dy.pow(mu, dy.inputVector([2])) - dy.exp(log_var))
+
+    # Reparameterize
+    z = self.reparameterize(mu, log_var)
+
+    W_out = dy.parameter(self.W_out_p)
+    b_out = dy.parameter(self.b_out_p)
+
+    # Calculate the reconstruction loss
+    pred = self.decoder_dnn.predict(z)
+    recons_loss = dy.l2_norm(output_frame - pred)
+
+    return kl_loss, recons_loss
+
+  def predict(self, input_frame):
+
+    # Renew the computation graph
+    #dy.renew_cg()
+
+    # Instantiate the params
+    W_mean = dy.parameter(self.W_mean_p)
+    V_mean = dy.parameter(self.V_mean_p)
+    b_mean = dy.parameter(self.b_mean_p)
+    W_var = dy.parameter(self.W_var_p)
+    V_var = dy.parameter(self.V_var_p)
+    b_var = dy.parameter(self.b_var_p)
+
+    # Get the mean and diagonal log covariance from the encoder
+    mu = self.mlp(input_frame , W_mean, V_mean, b_mean)
+    log_var = self.mlp(input_frame , W_mean, V_mean, b_mean)
+
+    # Compute the KL Divergence loss
+    kl_loss = -0.5 * dy.sum_elems(1 + log_var - dy.pow(mu, dy.inputVector([2])) - dy.exp(log_var))
+
+    # Reparameterize
+    z = self.reparameterize(mu, log_var)
+
+    W_out = dy.parameter(self.W_out_p)
+    b_out = dy.parameter(self.b_out_p)
+
+    # Calculate the reconstruction loss
+    pred = dy.affine_transform([b_out, W_out, z])
+
+    return pred
+
+
+
+  # support saving:
+  def param_collection(self): return self.pc
+
+  @staticmethod
+  def from_spec(spec, model):
+    num_input, hidden_layer_list, num_out, act = spec
+    return AutoEncoder(model, num_input, hidden_layer_list, num_out, act)
+
+  def save(self, path):
+     if not os.path.exists(path): os.makedirs(path)
+     arr = [self.num_input, self.num_hidden, self.num_out]
+     with open(path + '/model_hyps', 'w') as f: pickle.dump(arr, f)
+     self.model.save(path + '/model')
+
+  @staticmethod
+  def load(model, path, load_model_params=True):
+      if not os.path.exists(path): raise Exception("Model "+path+" does not exist")
+      with open(path+"/model_hyps", "r") as f: arr = pickle.load(f)
+      model.populate(path + '/model')
+      hidden_layer_list = arr[1]
+      num_input = arr[0]
+      num_out = arr[2]
+      return AutoEncoder(model, num_input, hidden_layer_list, num_out, act=dy.tanh)
+
+
+
