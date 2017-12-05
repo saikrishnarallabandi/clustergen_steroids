@@ -38,11 +38,7 @@ class falcon_heavy(object):
       # Add generic layers
       self.generic_dnn = FeedForwardNeuralNet(self.model, [self.num_hidden, [self.num_hidden], self.num_hidden, [dy.selu, dy.selu, dy.selu, dy.selu, dy.selu, dy.selu] ])
       # Add specific layers
-      self.post_dnn_array = []
-      self.post_dnn_array = []
-      for i in range(4):
-          self.post_dnn_array.append(FeedForwardNeuralNet(self.model, [self.num_hidden, [self.num_hidden], self.num_output, [dy.selu, dy.selu, dy.selu] ]))
-
+      self.post_dnn = FeedForwardNeuralNet(self.model, [self.num_hidden, [self.num_hidden], self.num_output, [dy.selu, dy.selu, dy.selu] ])
       # Spec
       self.spec = (args)
 
@@ -50,20 +46,18 @@ class falcon_heavy(object):
    def calculate_loss(self,input,output,srcspk, tgtspk):
 
          source_dnn = self.pre_dnn_array[srcspk]
-         target_dnn = self.post_dnn_array[tgtspk]
          
          source_encoding = source_dnn.predict(input)
          generic = self.generic_dnn.predict(source_encoding)
-         loss = target_dnn.calculate_loss(generic, output)
+         loss = self.post_dnn.calculate_loss(generic, output)
          return loss
  
-   def predict(self,input,srcspk, tgtspk):
+   def predict(self,input,srcspk):
 
          source_dnn = self.pre_dnn_array[srcspk]
-         target_dnn = self.post_dnn_array[tgtspk]
 
          source_encoding = source_dnn.predict(input)
          generic = self.generic_dnn.predict(source_encoding)
-         frame = target_dnn.predict(generic)
+         frame = self.post_dnn.predict(generic)
          return frame
  

@@ -1,6 +1,6 @@
 import _dynet
 import dynet_config
-dynet_config.set(mem=11000, requested_gpus=1, autobatch=1)
+dynet_config.set(mem=10000, requested_gpus=1, autobatch=1)
 import dynet as dy
 import os
 import pickle
